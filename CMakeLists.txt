@@ -14,7 +14,16 @@ set(VTM_EXTERNAL_DIR "${VTM_SOURCE_DIR}/external")
 #================================#
 # Dependencies                   #
 #================================#
-find_package(Vulkan REQUIRED)
+#find_package(Vulkan REQUIRED)
+# set up Vulkan C++ module
+add_library(VulkanCppModule)
+target_sources(VulkanCppModule PUBLIC
+    FILE_SET CXX_MODULES
+    FILES ${VTM_EXTERNAL_DIR}/vulkan-headers/include/vulkan/vulkan.cppm
+)
+target_include_directories(VulkanCppModule PUBLIC ${VTM_EXTERNAL_DIR}/vulkan-headers/include)
+target_compile_definitions(VulkanCppModule PUBLIC VULKAN_HPP_NO_SMART_HANDLE)
+
 set(GLFW_BUILD_EXAMPLES OFF)
 set(GLFW_BUILD_TESTS OFF)
 set(GLFW_BUILD_DOCS OFF)
@@ -22,14 +31,15 @@ set(GLFW_INSTALL OFF)
 add_subdirectory("${VTM_EXTERNAL_DIR}/glfw" EXCLUDE_FROM_ALL)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+set_target_properties(VulkanCppModule PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/vulkan")
 set_target_properties(glfw update_mappings PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/glfw")
 
 #================================#
 # Main Target                    #
 #================================#
 add_executable(${PROJECT_NAME} main.cpp)
-target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan glfw)
-add_dependencies(${PROJECT_NAME} glfw)
+target_link_libraries(${PROJECT_NAME} PRIVATE VulkanCppModule glfw)
+add_dependencies(${PROJECT_NAME} VulkanCppModule glfw)
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
 
 #================================#
