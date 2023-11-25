@@ -2,6 +2,7 @@ import vulkan_hpp;
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <fstream>
 #include <vector>
 #include <iostream>
 
@@ -12,8 +13,7 @@ constexpr int window_height = 600;
 vk::Bool32 debugMessageFunc(vk::DebugUtilsMessageSeverityFlagBitsEXT /*messageSeverity*/,
 						    vk::DebugUtilsMessageTypeFlagsEXT /*messageTypes*/,
 						    vk::DebugUtilsMessengerCallbackDataEXT const* pCallbackData, 
-						    void* /*pUserData*/)
-{
+						    void* /*pUserData*/) {
     std::printf("validation layer: %s\n", pCallbackData->pMessage);
     return vk::False;
 }
@@ -44,6 +44,39 @@ std::optional<uint32_t> findMemoryTypeIndex(const vk::PhysicalDeviceMemoryProper
 	return std::nullopt;
 }
 
+struct Buffer
+{
+    Buffer(const vk::raii::Device& device, const vk::PhysicalDeviceMemoryProperties& memoryProperties,
+		vk::BufferUsageFlags usageFlags, const vk::DeviceSize size, const vk::MemoryPropertyFlags memoryPropertiesFlags)
+		: buffer{nullptr}, deviceMemory{nullptr}, deviceAddress{0}
+    {
+        usageFlags |= vk::BufferUsageFlagBits::eShaderDeviceAddress;
+        const vk::BufferCreateInfo bufferCreateInfo{ {}, size, usageFlags };
+        buffer = std::move(vk::raii::Buffer{ device, bufferCreateInfo });
+        const auto memoryRequirements = buffer.getMemoryRequirements();
+        const auto memoryTypeIndex = findMemoryTypeIndex(memoryProperties, memoryRequirements, memoryPropertiesFlags);
+        if (!memoryTypeIndex.has_value()) exitWithError("No memory type index found");
+
+        constexpr vk::MemoryAllocateFlagsInfo memoryAllocateFlagsInfo{ vk::MemoryAllocateFlagBits::eDeviceAddress };
+        const vk::MemoryAllocateInfo memoryAllocateInfo{ memoryRequirements.size, memoryTypeIndex.value(), &memoryAllocateFlagsInfo };
+    	deviceMemory = std::move(vk::raii::DeviceMemory{ device, memoryAllocateInfo });
+        buffer.bindMemory(*deviceMemory, 0);
+
+        const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo { *buffer };
+        deviceAddress = device.getBufferAddress(bufferDeviceAddressInfo);
+	}   
+
+	vk::raii::Buffer buffer;
+	vk::raii::DeviceMemory deviceMemory;
+	vk::DeviceAddress deviceAddress;
+};
+
+std::string loadFile(const std::string_view path)
+{
+    std::ifstream in { path.data() };
+    return { (std::istreambuf_iterator{in}),std::istreambuf_iterator<char>{} };
+}
+
 int main(int argc, char *argv[])
 {
     if (!glfwInit()) exitWithError("Failed to init GLFW");
@@ -69,8 +102,8 @@ int main(int argc, char *argv[])
 #if !defined( NDEBUG )
     iLayers.emplace_back("VK_LAYER_KHRONOS_validation");
 #endif
-    bool extensionsAvailable = extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions);
-    bool layersAvailable = extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers);
+    if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
+    if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) exitWithError("Instance layers not available");
 
     vk::InstanceCreateInfo instanceCreateInfo;
     instanceCreateInfo.setPApplicationInfo(&applicationInfo);
@@ -91,27 +124,35 @@ int main(int argc, char *argv[])
     vk::raii::PhysicalDevices physicalDevices{ instance };
     const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
     auto memoryProperties = physicalDevice.getMemoryProperties();
-
+    // queue
     constexpr float priority = 1.0f;
     vk::DeviceQueueCreateInfo deviceQueueCreateInfo{ {}, 0, 1, &priority };
-
+    // extensions
     std::vector dExtensions { vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
+	// features
+    vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
 
     vk::DeviceCreateInfo deviceCreateInfo;
     deviceCreateInfo.setQueueCreateInfos({ deviceQueueCreateInfo });
     deviceCreateInfo.setPEnabledExtensionNames(dExtensions);
+    deviceCreateInfo.setPNext(&bufferDeviceAddressFeatures);
     vk::raii::Device device{ physicalDevice, deviceCreateInfo };
 
-    vk::MemoryPropertyFlags memoryPropertiesFlags = vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible;
+    /*vk::MemoryPropertyFlags memoryPropertiesFlags = vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible;
     vk::BufferCreateInfo bufferCreateInfo{ {}, 10, vk::BufferUsageFlagBits::eVertexBuffer };
     vk::raii::Buffer buffer{ device, bufferCreateInfo };
     auto memoryRequirements = buffer.getMemoryRequirements();
     auto memoryTypeIndex = findMemoryTypeIndex(memoryProperties, memoryRequirements, memoryPropertiesFlags);
     if (!memoryTypeIndex.has_value()) exitWithError("No memory type index found");
     vk::MemoryAllocateInfo memoryAllocateInfo{ memoryRequirements.size, memoryTypeIndex.value() };
-    vk::raii::DeviceMemory deviceMemory{ device, memoryAllocateInfo };
-    
+    vk::raii::DeviceMemory deviceMemory{ device, memoryAllocateInfo };*/
+
+    Buffer buffer{ device, memoryProperties, vk::BufferUsageFlagBits::eVertexBuffer, 10, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible };
+
+    vk::ShaderCreateInfoEXT shaderCreateInfoVertex = { vk::ShaderCreateFlagBitsEXT::eLinkStage, vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment };
+    //vk::raii::ShaderEXT vertexShader{ device, shaderCreateInfo };
+
     while(!glfwWindowShouldClose(window))
     {
     	glfwPollEvents();
