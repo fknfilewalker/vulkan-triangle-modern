@@ -9,10 +9,6 @@ constexpr bool fullscreen = false;
 constexpr int window_width = 800;
 constexpr int window_height = 600;
 
-class App {
-    
-};
-
 vk::Bool32 debugMessageFunc(vk::DebugUtilsMessageSeverityFlagBitsEXT /*messageSeverity*/,
 						    vk::DebugUtilsMessageTypeFlagsEXT /*messageTypes*/,
 						    vk::DebugUtilsMessengerCallbackDataEXT const* pCallbackData, 
@@ -32,11 +28,20 @@ template<typename T>
 bool extensionsOrLayersAvailable(const std::vector<T>& available, const std::vector<const char*>& requested) {
     return std::all_of(requested.begin(), requested.end(), [&available](const char* requestedElement) {
         return std::find_if(available.begin(), available.end(), [requestedElement](const T& availableElement){
-            if constexpr (std::is_same_v<vk::LayerProperties, T>) return std::string_view{ availableElement.layerName.data() }.compare(requestedElement);
-            else if constexpr (std::is_same_v<vk::ExtensionProperties, T>) return std::string_view{ availableElement.extensionName.data() }.compare(requestedElement);
+            if constexpr (std::is_same_v<vk::LayerProperties, T>) return std::string_view{ availableElement.layerName.data() }.compare(requestedElement) == 0;
+            else if constexpr (std::is_same_v<vk::ExtensionProperties, T>) return std::string_view{ availableElement.extensionName.data() }.compare(requestedElement) == 0;
             else return false;
         }) != available.end();
     });
+}
+
+std::optional<uint32_t> findMemoryTypeIndex(const vk::PhysicalDeviceMemoryProperties& memoryProperties, 
+	const vk::MemoryRequirements& memoryRequirements, const vk::MemoryPropertyFlags properties) {
+	for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i)
+	{
+		if ((memoryRequirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) return i;
+	}
+	return std::nullopt;
 }
 
 int main(int argc, char *argv[])
@@ -83,12 +88,30 @@ int main(int argc, char *argv[])
     //vk::raii::DebugUtilsMessengerEXT debugUtilsMessengerEXT(instance, debugUtilsMessengerCreateInfo);
 #endif
 
-    vk::SurfaceKHR surface;
-    //glfwCreateWindowSurface(instance, window, nullptr, &surface);
+    vk::raii::PhysicalDevices physicalDevices{ instance };
+    const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
+    auto memoryProperties = physicalDevice.getMemoryProperties();
 
-    auto devices = instance.enumeratePhysicalDevices();
+    constexpr float priority = 1.0f;
+    vk::DeviceQueueCreateInfo deviceQueueCreateInfo{ {}, 0, 1, &priority };
 
+    std::vector dExtensions { vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
+    if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
 
+    vk::DeviceCreateInfo deviceCreateInfo;
+    deviceCreateInfo.setQueueCreateInfos({ deviceQueueCreateInfo });
+    deviceCreateInfo.setPEnabledExtensionNames(dExtensions);
+    vk::raii::Device device{ physicalDevice, deviceCreateInfo };
+
+    vk::MemoryPropertyFlags memoryPropertiesFlags = vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible;
+    vk::BufferCreateInfo bufferCreateInfo{ {}, 10, vk::BufferUsageFlagBits::eVertexBuffer };
+    vk::raii::Buffer buffer{ device, bufferCreateInfo };
+    auto memoryRequirements = buffer.getMemoryRequirements();
+    auto memoryTypeIndex = findMemoryTypeIndex(memoryProperties, memoryRequirements, memoryPropertiesFlags);
+    if (!memoryTypeIndex.has_value()) exitWithError("No memory type index found");
+    vk::MemoryAllocateInfo memoryAllocateInfo{ memoryRequirements.size, memoryTypeIndex.value() };
+    vk::raii::DeviceMemory deviceMemory{ device, memoryAllocateInfo };
+    
     while(!glfwWindowShouldClose(window))
     {
     	glfwPollEvents();
