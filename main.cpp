@@ -48,6 +48,7 @@ std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyPr
         const std::bitset<12> score = static_cast<uint32_t>(queueFamiliesProperties[i].queueFlags);
 		// check if queue family supports all requested queue flags
         if (static_cast<uint32_t>(queueFamiliesProperties[i].queueFlags & queueFlags) == static_cast<uint32_t>(queueFlags)) {
+            // use queue family with the least other bits set
             if (!bestFamily.has_value() || score.count() < bestScore.count()) {
                 bestFamily = i;
                 bestScore = score;
@@ -81,6 +82,30 @@ struct Buffer
 	vk::raii::Buffer buffer;
 	vk::raii::DeviceMemory memory;
 	vk::DeviceAddress deviceAddress;
+};
+
+struct Swapchain
+{
+	Swapchain(const vk::raii::Device& device)
+	{
+		const uint32_t imageCount = 3;
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+        	frames.emplace_back(device);
+		}
+    }
+    struct Frame {
+        Frame(const vk::raii::Device& device) : inFlightFence{ nullptr }, nextImageAvailableSemaphore{ nullptr }, renderFinishedSemaphore{ nullptr }
+        {
+            inFlightFence = std::move(device.createFence(vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled }));
+            nextImageAvailableSemaphore = std::move(device.createSemaphore(vk::SemaphoreCreateInfo{}));
+            renderFinishedSemaphore = std::move(device.createSemaphore(vk::SemaphoreCreateInfo{}));
+        }
+        vk::raii::Fence inFlightFence;
+        vk::raii::Semaphore nextImageAvailableSemaphore;
+        vk::raii::Semaphore renderFinishedSemaphore;
+    };
+    std::vector<Frame> frames;
 };
 
 std::string loadFile(const std::string_view path)
@@ -221,6 +246,7 @@ int main(int argc, char *argv[])
     const vk::ShaderCreateInfoEXT sci[2] = { shaderCreateInfoVertex, shaderCreateInfoFragment };
     //vk::raii::ShaderEXT shader{ device, sci[0] };
 
+    Swapchain swapchain{ device };
 
     while(!glfwWindowShouldClose(window))
     {
