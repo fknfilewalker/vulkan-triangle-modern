@@ -1,5 +1,6 @@
 import vulkan_hpp;
 #include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
 
 #include <algorithm>
 #include <bitset>
@@ -88,6 +89,9 @@ struct Swapchain
 {
 	Swapchain(const vk::raii::Device& device)
 	{
+        //vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR;
+        //vk::raii::SwapchainKHR swapchainKHR{ device, swapchainCreateInfoKHR };
+
 		const uint32_t imageCount = 3;
         for (uint32_t i = 0; i < imageCount; ++i)
         {
@@ -126,13 +130,12 @@ layout(push_constant, std430) uniform pushConstant
 };
 layout(buffer_reference, std430) readonly buffer Vertex
 {
-    vec4 data;
+    vec4 position;
 };
 
 void main() {
 	Vertex vertex = Vertex(vertexPtr + gl_VertexIndex);
-	gl_Position = vec4(vertex.data.xy, 0.0, 1.0);
-}
+	gl_Position = vec4(vertex.position.xy, 0.0, 1.0);
 })";
 
 const char* fragmentShader = R"(
@@ -178,6 +181,13 @@ int main(int argc, char *argv[])
 #endif
     vk::raii::Instance instance(context, instanceCreateInfo);
 
+    vk::raii::SurfaceKHR surfaceKHR{ nullptr };
+	// unfortunately glfw surface creation does not work with the vulkan c++20 modules
+#ifdef _WIN32
+	vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
+    surfaceKHR = std::move(vk::raii::SurfaceKHR { instance, win32SurfaceCreateInfoKHR });
+#endif
+
 #if !defined( NDEBUG )
     const vk::DebugUtilsMessageSeverityFlagsEXT severityFlags{ vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError };
     const vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags{ vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation };
@@ -206,6 +216,7 @@ int main(int argc, char *argv[])
     deviceCreateInfo.setPEnabledExtensionNames(dExtensions);
     deviceCreateInfo.setPNext(&shaderObjectFeatures);
     vk::raii::Device device{ physicalDevice, deviceCreateInfo };
+
     // queue
     vk::raii::Queue queue{ device, queueFamilyIndex.value(), 0 };
 
@@ -228,6 +239,7 @@ int main(int argc, char *argv[])
     buffer.memory.unmapMemory();
 
     // setup shader objects
+	// https://github.com/KhronosGroup/Vulkan-Docs/blob/main/proposals/VK_EXT_shader_object.adoc
     vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
 
     vk::ShaderCreateInfoEXT shaderCreateInfoVertex = { vk::ShaderCreateFlagBitsEXT::eLinkStage, vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment };
