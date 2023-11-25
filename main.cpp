@@ -12,12 +12,6 @@ constexpr bool fullscreen = false;
 constexpr int window_width = 800;
 constexpr int window_height = 600;
 
-vk::Bool32 debugMessageFunc(vk::DebugUtilsMessageSeverityFlagBitsEXT /*messageSeverity*/, vk::DebugUtilsMessageTypeFlagsEXT /*messageTypes*/,
-						    vk::DebugUtilsMessengerCallbackDataEXT const* pCallbackData, void* /*pUserData*/) {
-    std::printf("validation layer: %s\n", pCallbackData->pMessage);
-    return vk::False;
-}
-
 void exitWithError(const std::string_view error) {
 	std::printf("%s\n", error.data());
 	exit(EXIT_FAILURE);
@@ -87,19 +81,30 @@ struct Buffer
 
 struct Swapchain
 {
-	Swapchain(const vk::raii::Device& device)
+	Swapchain(const vk::raii::Device& device, const vk::raii::PhysicalDevice& physicalDevice,
+        const vk::raii::SurfaceKHR& surface, uint32_t queueFamilyIndex) : swapchainKHR{nullptr},
+		commandPool{ device, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } },
+		commandBuffers{nullptr}
 	{
-        //vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR;
-        //vk::raii::SwapchainKHR swapchainKHR{ device, swapchainCreateInfoKHR };
+		const auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
+		const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR(*surface);
+        auto surfacePresentModes = physicalDevice.getSurfacePresentModesKHR(*surface);
 
-		const uint32_t imageCount = 3;
-        for (uint32_t i = 0; i < imageCount; ++i)
-        {
-        	frames.emplace_back(device);
-		}
+        const uint32_t imageCount = std::min(3u, surfaceCapabilities.maxImageCount);
+		const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR {{}, *surface, imageCount,
+			surfaceFormats[0].format, surfaceFormats[0].colorSpace, surfaceCapabilities.currentExtent,
+			1u, vk::ImageUsageFlagBits::eColorAttachment};
+		swapchainKHR = std::move(vk::raii::SwapchainKHR{ device, swapchainCreateInfoKHR });
+        
+        // commandbuffer
+        commandBuffers = std::move(vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } });
+
+        frames.reserve(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(device, (commandBuffers[i]));
     }
     struct Frame {
-        Frame(const vk::raii::Device& device) : inFlightFence{ nullptr }, nextImageAvailableSemaphore{ nullptr }, renderFinishedSemaphore{ nullptr }
+        Frame(const vk::raii::Device& device, vk::raii::CommandBuffer& commandBuffer) : inFlightFence{ nullptr }, nextImageAvailableSemaphore{ nullptr },
+			renderFinishedSemaphore{ nullptr }, commandBuffer{ commandBuffer }
         {
             inFlightFence = std::move(device.createFence(vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled }));
             nextImageAvailableSemaphore = std::move(device.createSemaphore(vk::SemaphoreCreateInfo{}));
@@ -108,8 +113,52 @@ struct Swapchain
         vk::raii::Fence inFlightFence;
         vk::raii::Semaphore nextImageAvailableSemaphore;
         vk::raii::Semaphore renderFinishedSemaphore;
+        vk::raii::CommandBuffer& commandBuffer;
     };
+
+    Frame& getCurrentFrame() { return frames[currentFrame]; }
+    void acquireNextImage(const vk::raii::Device& device) {
+	    const auto nextImage = swapchainKHR.acquireNextImage(0, *frames[currentImageIdx].nextImageAvailableSemaphore);
+        previousImageIdx = currentImageIdx;
+        currentImageIdx = nextImage.second;
+
+	    const Frame& frame = frames[currentImageIdx];
+        while (vk::Result::eTimeout == device.waitForFences({ *frame.inFlightFence }, vk::True, UINT64_MAX)) {}
+        device.resetFences({ *frame.inFlightFence });
+        frame.commandBuffer.begin(vk::CommandBufferBeginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+    }
+    void submitImage(const vk::raii::Device& device)
+    {
+        const Frame& frame = frames[currentImageIdx];
+        frame.commandBuffer.end();
+
+        vk::raii::Queue queue = device.getQueue(0, 0);
+
+        std::vector<vk::PipelineStageFlags> waitDstStageMask = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+        vk::SubmitInfo submitInfo;
+        submitInfo.setWaitSemaphores({ *frames[previousImageIdx].nextImageAvailableSemaphore });
+        submitInfo.setWaitDstStageMask(waitDstStageMask);
+        submitInfo.setSignalSemaphores({ *frame.renderFinishedSemaphore });
+        submitInfo.setCommandBuffers({ *frame.commandBuffer });
+        queue.submit({ submitInfo }, *frame.inFlightFence);
+        
+        vk::PresentInfoKHR presentInfoKHR;
+        presentInfoKHR.setSwapchainCount(1);
+        presentInfoKHR.setSwapchains({ *swapchainKHR });
+        presentInfoKHR.setWaitSemaphores({ *frame.renderFinishedSemaphore });
+        presentInfoKHR.setPImageIndices(&currentImageIdx);
+
+        resultCheck(queue.presentKHR(presentInfoKHR), "present Swapchain error");
+        
+	}
+
+    uint32_t currentFrame = 0;
+    uint32_t currentImageIdx = 0;
+    uint32_t previousImageIdx = 0;
     std::vector<Frame> frames;
+    vk::raii::SwapchainKHR swapchainKHR;
+    vk::raii::CommandPool commandPool;
+    vk::raii::CommandBuffers commandBuffers;
 };
 
 std::string loadFile(const std::string_view path)
@@ -168,10 +217,10 @@ int main(int argc, char *argv[])
     std::vector<const char*> iLayers;
 #if !defined( NDEBUG )
     iLayers.emplace_back("VK_LAYER_KHRONOS_validation");
+    if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
 #endif
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
-    if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) exitWithError("Instance layers not available");
-
+    
     vk::InstanceCreateInfo instanceCreateInfo;
     instanceCreateInfo.setPApplicationInfo(&applicationInfo);
     instanceCreateInfo.setPEnabledExtensionNames(iExtensions);
@@ -186,13 +235,6 @@ int main(int argc, char *argv[])
 #ifdef _WIN32
 	vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
     surfaceKHR = std::move(vk::raii::SurfaceKHR { instance, win32SurfaceCreateInfoKHR });
-#endif
-
-#if !defined( NDEBUG )
-    const vk::DebugUtilsMessageSeverityFlagsEXT severityFlags{ vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError };
-    const vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags{ vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation };
-    //const vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo{ {}, severityFlags, messageTypeFlags, &debugMessageFunc };
-    //vk::raii::DebugUtilsMessengerEXT debugUtilsMessengerEXT(instance, debugUtilsMessengerCreateInfo);
 #endif
 
     vk::raii::PhysicalDevices physicalDevices{ instance };
@@ -219,12 +261,6 @@ int main(int argc, char *argv[])
 
     // queue
     vk::raii::Queue queue{ device, queueFamilyIndex.value(), 0 };
-
-	// commandbuffer
-    uint32_t swapchainImageCount = 3;
-    vk::raii::CommandPool commandPool{ device, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex.value() } };
-    vk::CommandBufferAllocateInfo commandBufferAllocateInfo{ *commandPool, vk::CommandBufferLevel::ePrimary, swapchainImageCount };
-    vk::raii::CommandBuffers commandBuffers(device, commandBufferAllocateInfo);
 
 	// setup vertex buffer
     std::vector vertices = {
@@ -258,7 +294,7 @@ int main(int argc, char *argv[])
     const vk::ShaderCreateInfoEXT sci[2] = { shaderCreateInfoVertex, shaderCreateInfoFragment };
     //vk::raii::ShaderEXT shader{ device, sci[0] };
 
-    Swapchain swapchain{ device };
+    Swapchain swapchain{ device, physicalDevice, surfaceKHR, queueFamilyIndex.value() };
 
     while(!glfwWindowShouldClose(window))
     {
