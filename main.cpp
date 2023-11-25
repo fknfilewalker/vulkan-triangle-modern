@@ -47,8 +47,8 @@ std::optional<uint32_t> findMemoryTypeIndex(const vk::PhysicalDeviceMemoryProper
 struct Buffer
 {
     Buffer(const vk::raii::Device& device, const vk::PhysicalDeviceMemoryProperties& memoryProperties,
-		vk::BufferUsageFlags usageFlags, const vk::DeviceSize size, const vk::MemoryPropertyFlags memoryPropertiesFlags)
-		: buffer{nullptr}, deviceMemory{nullptr}, deviceAddress{0}
+        const vk::DeviceSize size, vk::BufferUsageFlags usageFlags, const vk::MemoryPropertyFlags memoryPropertiesFlags)
+		: buffer{nullptr}, memory{nullptr}, deviceAddress{0}
     {
         usageFlags |= vk::BufferUsageFlagBits::eShaderDeviceAddress;
         const vk::BufferCreateInfo bufferCreateInfo{ {}, size, usageFlags };
@@ -59,15 +59,15 @@ struct Buffer
 
         constexpr vk::MemoryAllocateFlagsInfo memoryAllocateFlagsInfo{ vk::MemoryAllocateFlagBits::eDeviceAddress };
         const vk::MemoryAllocateInfo memoryAllocateInfo{ memoryRequirements.size, memoryTypeIndex.value(), &memoryAllocateFlagsInfo };
-    	deviceMemory = std::move(vk::raii::DeviceMemory{ device, memoryAllocateInfo });
-        buffer.bindMemory(*deviceMemory, 0);
+        memory = std::move(vk::raii::DeviceMemory{ device, memoryAllocateInfo });
+        buffer.bindMemory(*memory, 0);
 
         const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo { *buffer };
         deviceAddress = device.getBufferAddress(bufferDeviceAddressInfo);
-	}   
+	}
 
 	vk::raii::Buffer buffer;
-	vk::raii::DeviceMemory deviceMemory;
+	vk::raii::DeviceMemory memory;
 	vk::DeviceAddress deviceAddress;
 };
 
@@ -76,6 +76,33 @@ std::string loadFile(const std::string_view path)
     std::ifstream in { path.data() };
     return { (std::istreambuf_iterator{in}),std::istreambuf_iterator<char>{} };
 }
+
+const char* vertexShader = R"(
+#version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_buffer_reference2 : require
+
+layout(push_constant, std430) uniform pushConstant
+{
+    uint64_t vertexPtr;
+};
+layout(buffer_reference, std430) readonly buffer Vertex
+{
+    vec4 data;
+};
+
+void main() {
+	Vertex vertex = Vertex(vertexPtr + gl_VertexIndex);
+	gl_Position = vec4(vertex.data.xy, 0.0, 1.0);
+}
+})";
+
+const char* fragmentShader = R"(
+#version 450
+void main() {
+	gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+})";
 
 int main(int argc, char *argv[])
 {
@@ -132,26 +159,45 @@ int main(int argc, char *argv[])
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
 	// features
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
+    vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &bufferDeviceAddressFeatures };
 
     vk::DeviceCreateInfo deviceCreateInfo;
     deviceCreateInfo.setQueueCreateInfos({ deviceQueueCreateInfo });
     deviceCreateInfo.setPEnabledExtensionNames(dExtensions);
-    deviceCreateInfo.setPNext(&bufferDeviceAddressFeatures);
+    deviceCreateInfo.setPNext(&shaderObjectFeatures);
     vk::raii::Device device{ physicalDevice, deviceCreateInfo };
 
-    /*vk::MemoryPropertyFlags memoryPropertiesFlags = vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible;
-    vk::BufferCreateInfo bufferCreateInfo{ {}, 10, vk::BufferUsageFlagBits::eVertexBuffer };
-    vk::raii::Buffer buffer{ device, bufferCreateInfo };
-    auto memoryRequirements = buffer.getMemoryRequirements();
-    auto memoryTypeIndex = findMemoryTypeIndex(memoryProperties, memoryRequirements, memoryPropertiesFlags);
-    if (!memoryTypeIndex.has_value()) exitWithError("No memory type index found");
-    vk::MemoryAllocateInfo memoryAllocateInfo{ memoryRequirements.size, memoryTypeIndex.value() };
-    vk::raii::DeviceMemory deviceMemory{ device, memoryAllocateInfo };*/
+	// setup vertex buffer
+    std::vector vertices = {
+    	-0.5f, -0.5f, 0.0f, 1.0f,
+    	 0.5f, -0.5f, 0.0f, 1.0f,
+    	 0.0f,  0.5f, 0.0f, 1.0f
+    };
+    const size_t verticesSize = vertices.size() * sizeof(float);
+    Buffer buffer{ device, memoryProperties, verticesSize, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible};
+    void* p = buffer.memory.mapMemory(0, vk::WholeSize);
+    std::memcpy(p, vertices.data(), verticesSize);
+    buffer.memory.unmapMemory();
 
-    Buffer buffer{ device, memoryProperties, vk::BufferUsageFlagBits::eVertexBuffer, 10, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible };
+    // setup shader objects
+    vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4 };
 
     vk::ShaderCreateInfoEXT shaderCreateInfoVertex = { vk::ShaderCreateFlagBitsEXT::eLinkStage, vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment };
-    //vk::raii::ShaderEXT vertexShader{ device, shaderCreateInfo };
+    shaderCreateInfoVertex.codeType = vk::ShaderCodeTypeEXT::eSpirv;
+    shaderCreateInfoVertex.pName = "main";
+    shaderCreateInfoVertex.pCode = reinterpret_cast<const uint32_t*>(vertexShader);
+    shaderCreateInfoVertex.codeSize = std::strlen(vertexShader);
+    shaderCreateInfoVertex.setPushConstantRanges({ pcRange });
+
+    vk::ShaderCreateInfoEXT shaderCreateInfoFragment = { vk::ShaderCreateFlagBitsEXT::eLinkStage, vk::ShaderStageFlagBits::eFragment};
+    shaderCreateInfoVertex.codeType = vk::ShaderCodeTypeEXT::eSpirv;
+    shaderCreateInfoVertex.pName = "main";
+    shaderCreateInfoVertex.pCode = reinterpret_cast<const uint32_t*>(fragmentShader);
+    shaderCreateInfoVertex.codeSize = std::strlen(fragmentShader);
+
+    const vk::ShaderCreateInfoEXT sci[2] = { shaderCreateInfoVertex, shaderCreateInfoFragment };
+    //vk::raii::ShaderEXT shader{ device, sci[0] };
+
 
     while(!glfwWindowShouldClose(window))
     {
