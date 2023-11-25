@@ -2,6 +2,7 @@ import vulkan_hpp;
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <bitset>
 #include <fstream>
 #include <vector>
 #include <iostream>
@@ -10,16 +11,13 @@ constexpr bool fullscreen = false;
 constexpr int window_width = 800;
 constexpr int window_height = 600;
 
-vk::Bool32 debugMessageFunc(vk::DebugUtilsMessageSeverityFlagBitsEXT /*messageSeverity*/,
-						    vk::DebugUtilsMessageTypeFlagsEXT /*messageTypes*/,
-						    vk::DebugUtilsMessengerCallbackDataEXT const* pCallbackData, 
-						    void* /*pUserData*/) {
+vk::Bool32 debugMessageFunc(vk::DebugUtilsMessageSeverityFlagBitsEXT /*messageSeverity*/, vk::DebugUtilsMessageTypeFlagsEXT /*messageTypes*/,
+						    vk::DebugUtilsMessengerCallbackDataEXT const* pCallbackData, void* /*pUserData*/) {
     std::printf("validation layer: %s\n", pCallbackData->pMessage);
     return vk::False;
 }
 
-void exitWithError(const std::string_view error)
-{
+void exitWithError(const std::string_view error) {
 	std::printf("%s\n", error.data());
 	exit(EXIT_FAILURE);
 }
@@ -37,11 +35,26 @@ bool extensionsOrLayersAvailable(const std::vector<T>& available, const std::vec
 
 std::optional<uint32_t> findMemoryTypeIndex(const vk::PhysicalDeviceMemoryProperties& memoryProperties, 
 	const vk::MemoryRequirements& memoryRequirements, const vk::MemoryPropertyFlags properties) {
-	for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i)
-	{
+	for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i) {
 		if ((memoryRequirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) return i;
 	}
 	return std::nullopt;
+}
+
+std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyProperties>& queueFamiliesProperties, vk::QueueFlags queueFlags) {
+    std::optional<uint32_t> bestFamily;
+    std::bitset<12> bestScore = 0;
+    for (uint32_t i = 0; i < queueFamiliesProperties.size(); i++) {
+        const std::bitset<12> score = static_cast<uint32_t>(queueFamiliesProperties[i].queueFlags);
+		// check if queue family supports all requested queue flags
+        if (static_cast<uint32_t>(queueFamiliesProperties[i].queueFlags & queueFlags) == static_cast<uint32_t>(queueFlags)) {
+            if (!bestFamily.has_value() || score.count() < bestScore.count()) {
+                bestFamily = i;
+                bestScore = score;
+            }
+        }
+    }
+    return bestFamily;
 }
 
 struct Buffer
@@ -53,10 +66,10 @@ struct Buffer
         usageFlags |= vk::BufferUsageFlagBits::eShaderDeviceAddress;
         const vk::BufferCreateInfo bufferCreateInfo{ {}, size, usageFlags };
         buffer = std::move(vk::raii::Buffer{ device, bufferCreateInfo });
+
         const auto memoryRequirements = buffer.getMemoryRequirements();
         const auto memoryTypeIndex = findMemoryTypeIndex(memoryProperties, memoryRequirements, memoryPropertiesFlags);
         if (!memoryTypeIndex.has_value()) exitWithError("No memory type index found");
-
         constexpr vk::MemoryAllocateFlagsInfo memoryAllocateFlagsInfo{ vk::MemoryAllocateFlagBits::eDeviceAddress };
         const vk::MemoryAllocateInfo memoryAllocateInfo{ memoryRequirements.size, memoryTypeIndex.value(), &memoryAllocateFlagsInfo };
         memory = std::move(vk::raii::DeviceMemory{ device, memoryAllocateInfo });
@@ -65,7 +78,6 @@ struct Buffer
         const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo { *buffer };
         deviceAddress = device.getBufferAddress(bufferDeviceAddressInfo);
 	}
-
 	vk::raii::Buffer buffer;
 	vk::raii::DeviceMemory memory;
 	vk::DeviceAddress deviceAddress;
@@ -152,8 +164,11 @@ int main(int argc, char *argv[])
     const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
     auto memoryProperties = physicalDevice.getMemoryProperties();
     // queue
+    auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+    const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
+    if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     constexpr float priority = 1.0f;
-    vk::DeviceQueueCreateInfo deviceQueueCreateInfo{ {}, 0, 1, &priority };
+    vk::DeviceQueueCreateInfo deviceQueueCreateInfo{ {}, queueFamilyIndex.value(), 1, &priority };
     // extensions
     std::vector dExtensions { vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
@@ -166,6 +181,14 @@ int main(int argc, char *argv[])
     deviceCreateInfo.setPEnabledExtensionNames(dExtensions);
     deviceCreateInfo.setPNext(&shaderObjectFeatures);
     vk::raii::Device device{ physicalDevice, deviceCreateInfo };
+    // queue
+    vk::raii::Queue queue{ device, queueFamilyIndex.value(), 0 };
+
+	// commandbuffer
+    uint32_t swapchainImageCount = 3;
+    vk::raii::CommandPool commandPool{ device, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex.value() } };
+    vk::CommandBufferAllocateInfo commandBufferAllocateInfo{ *commandPool, vk::CommandBufferLevel::ePrimary, swapchainImageCount };
+    vk::raii::CommandBuffers commandBuffers(device, commandBufferAllocateInfo);
 
 	// setup vertex buffer
     std::vector vertices = {
@@ -180,7 +203,7 @@ int main(int argc, char *argv[])
     buffer.memory.unmapMemory();
 
     // setup shader objects
-    vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(float) * 4 };
+    vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
 
     vk::ShaderCreateInfoEXT shaderCreateInfoVertex = { vk::ShaderCreateFlagBitsEXT::eLinkStage, vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment };
     shaderCreateInfoVertex.codeType = vk::ShaderCodeTypeEXT::eSpirv;
