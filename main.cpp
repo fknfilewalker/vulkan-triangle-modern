@@ -418,7 +418,6 @@ int main(int argc, char *argv[])
         rAttachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
 
         cmdBuffer.beginRendering({ {}, { {}, {window_width, window_height} }, 1, 0, 1, &rAttachmentInfo });
-
         {
             cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, { *shaders[0], *shaders[1] });
             cmdBuffer.pushConstants<uint64_t>(*layout, vk::ShaderStageFlagBits::eVertex, 0, { buffer.deviceAddress });
@@ -440,10 +439,8 @@ int main(int argc, char *argv[])
             cmdBuffer.setRasterizerDiscardEnableEXT(vk::False);
             cmdBuffer.setAlphaToCoverageEnableEXT(vk::False);
             cmdBuffer.setPrimitiveRestartEnableEXT(vk::False);
+            cmdBuffer.draw(3, 1, 0, 0);
         }
-
-        cmdBuffer.draw(3, 1, 0, 0);
-
         cmdBuffer.endRendering();
 
         imageMemoryBarrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
