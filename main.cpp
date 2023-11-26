@@ -201,6 +201,7 @@ const char* vertexShader = R"(
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference2 : require
+#define sizeof(Type) (uint64_t(Type(uint64_t(0))+1))
 
 layout(buffer_reference, std430) readonly buffer Vertex
 {
