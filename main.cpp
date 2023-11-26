@@ -218,6 +218,8 @@ void main() {
 	fragColor = vec4(1.0, 0.0, 0.0, 1.0);
 })";
 
+
+// glslangValidator -V -o vertexShader.h --vn vertShader triangle.vert
 const uint32_t vertexShaderSPV[] = {
     0x07230203,0x00010000,0x0008000b,0x00000030,0x00000000,0x00020011,0x00000001,0x00020011,
     0x0000000b,0x00020011,0x000014e3,0x0009000a,0x5f565053,0x5f52484b,0x73796870,0x6c616369,
@@ -380,6 +382,7 @@ int main(int argc, char *argv[])
     shaderCreateInfoFragment.pCode = fragmentShaderSPV;
     shaderCreateInfoFragment.codeSize = sizeof(fragmentShaderSPV);
     std::vector<vk::raii::ShaderEXT> shaders = device.device.createShadersEXT({ shaderCreateInfoVertex, shaderCreateInfoFragment });
+    vk::raii::PipelineLayout layout{ device, {{}, 0, {}, 1, &pcRange} };
 
     Swapchain swapchain{ device, physicalDevice, surfaceKHR, queueFamilyIndex.value() };
     constexpr vk::ImageSubresourceRange imageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
@@ -394,16 +397,35 @@ int main(int argc, char *argv[])
     	glfwPollEvents();
         swapchain.acquireNextImage(device);
         const auto& cFrame = swapchain.getCurrentFrame();
+        const auto& cmdBuffer = cFrame.commandBuffer;
+
         imageMemoryBarrier.image = cFrame.image;
         imageMemoryBarrier.oldLayout = vk::ImageLayout::eUndefined;
         imageMemoryBarrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-        cFrame.commandBuffer.pipelineBarrier2(dependencyInfo);
-	    
-        cFrame.commandBuffer.clearColorImage(cFrame.image, vk::ImageLayout::eTransferDstOptimal, { 1.0f, 0.0f, 0.0f, 1.0f }, imageSubresourceRange);
+        cmdBuffer.pipelineBarrier2(dependencyInfo);
+
+        cmdBuffer.clearColorImage(cFrame.image, vk::ImageLayout::eTransferDstOptimal, { 1.0f, 0.0f, 0.0f, 1.0f }, imageSubresourceRange);
+
+        cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, { *shaders[0], *shaders[1] });
+        cmdBuffer.pushConstants<uint64_t>(*layout, vk::ShaderStageFlagBits::eVertex, 0, buffer.deviceAddress);
+        //cmdBuffer.draw(3, 1, 0, 0);
+
+        vk::RenderingInfo renderingInfo{};
+
+        vk::RenderingAttachmentInfo rai{};
+        /*rai.imageView = aColorAttachment.image->getImageView();
+        rai.imageLayout = aColorAttachment.image->getLayout();
+        rai.clearValue.color = aColorAttachment.clearValue;
+        rai.loadOp = aColorAttachment.loadOp;
+        rai.storeOp = aColorAttachment.storeOp;*/
+
+        //cmdBuffer.beginRendering({ {}, { {}, {800,600} }, 1, 0, {} });
+
+        //cmdBuffer.endRendering();
 
         imageMemoryBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
         imageMemoryBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
-        cFrame.commandBuffer.pipelineBarrier2(dependencyInfo);
+        cmdBuffer.pipelineBarrier2(dependencyInfo);
         swapchain.submitImage(device.queue[queueFamilyIndex.value()][0]);
 	}
     device.device.waitIdle();
