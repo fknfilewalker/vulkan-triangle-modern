@@ -4,7 +4,6 @@ set INSTALL_DIR=_bin
 
 if "%~1"=="" goto BLANK
 if "%~1"=="install" goto install
-if "%~1"=="test" goto test
 if "%~1"=="clean" goto CLEAN
 @ECHO ON
 
@@ -13,9 +12,8 @@ cmake -H. -B %PROJECT_DIR% -A "x64"
 GOTO DONE
 
 :INSTALL
-:: Windows
 echo "Note: Run make.bat clean to delete the output directories and then run make.bat install to run a clean build!"
-cmake -H. -B %PROJECT_DIR% -A "x64" -DTOOLCHAIN_ACTIVE=ON
+cmake -H. -B %PROJECT_DIR% -A "x64"
 cmake --build %PROJECT_DIR% --parallel 24 --config Debug --target install
 cmake --build %PROJECT_DIR% --parallel 24 --config Release --target install
 GOTO DONE
