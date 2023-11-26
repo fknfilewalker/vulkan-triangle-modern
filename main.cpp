@@ -7,6 +7,7 @@ import vulkan_hpp;
 #include <fstream>
 #include <vector>
 #include <iostream>
+#include <unordered_map>
 
 constexpr bool fullscreen = false;
 constexpr int window_width = 800;
@@ -53,6 +54,38 @@ std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyPr
     return bestFamily;
 }
 
+struct Device
+{
+    Device(const vk::raii::PhysicalDevice& physicalDevice, const std::vector<const char*>& extensions, 
+        const std::unordered_map<uint16_t, uint16_t>& queues, const void* pNext) : device{nullptr}
+    {
+	    constexpr float priority = 1.0f;
+        std::vector<vk::DeviceQueueCreateInfo> deviceQueueCreateInfos;
+        deviceQueueCreateInfos.reserve(queues.size());
+        for (const auto& [queueFamilyIndex, queueCount] : queues)
+        {
+        	deviceQueueCreateInfos.emplace_back(vk::DeviceQueueCreateInfo{ {}, queueFamilyIndex, queueCount, &priority });
+		}
+        vk::DeviceCreateInfo deviceCreateInfo;
+        deviceCreateInfo.setQueueCreateInfos(deviceQueueCreateInfos);
+        deviceCreateInfo.setPEnabledExtensionNames(extensions);
+        deviceCreateInfo.setPNext(pNext);
+    	device = std::move(vk::raii::Device{ physicalDevice, deviceCreateInfo });
+
+        for (const auto& [queueFamilyIndex, queueCount] : queues) {
+        	std::vector<vk::raii::Queue> queueFamily;
+			queueFamily.reserve(queueCount);
+			for (uint16_t i = 0; i < queueCount; ++i) queueFamily.emplace_back(device.getQueue(queueFamilyIndex, i));
+			queue.emplace_back(std::move(queueFamily));
+		}
+	}
+	operator const vk::raii::Device&() const { return device; }
+
+	vk::raii::Device device;
+    std::vector<std::vector<vk::raii::Queue>> queue;
+    //vk::raii::PhysicalDevice physicalDevice;
+};
+
 struct Buffer
 {
     Buffer(const vk::raii::Device& device, const vk::PhysicalDeviceMemoryProperties& memoryProperties,
@@ -95,10 +128,8 @@ struct Swapchain
 			surfaceFormats[0].format, surfaceFormats[0].colorSpace, surfaceCapabilities.currentExtent,
 			1u, vk::ImageUsageFlagBits::eColorAttachment};
 		swapchainKHR = std::move(vk::raii::SwapchainKHR{ device, swapchainCreateInfoKHR });
-        
-        // commandbuffer
-        commandBuffers = std::move(vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } });
 
+        commandBuffers = std::move(vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } });
         frames.reserve(imageCount);
         for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(device, (commandBuffers[i]));
     }
@@ -119,7 +150,8 @@ struct Swapchain
     Frame& getCurrentFrame() { return frames[currentFrame]; }
     void acquireNextImage(const vk::raii::Device& device) {
 	    const auto nextImage = swapchainKHR.acquireNextImage(0, *frames[currentImageIdx].nextImageAvailableSemaphore);
-        previousImageIdx = currentImageIdx;
+        resultCheck(nextImage.first, "acquireNextImage error");
+    	previousImageIdx = currentImageIdx;
         currentImageIdx = nextImage.second;
 
 	    const Frame& frame = frames[currentImageIdx];
@@ -230,8 +262,8 @@ int main(int argc, char *argv[])
 #endif
     vk::raii::Instance instance(context, instanceCreateInfo);
 
-    vk::raii::SurfaceKHR surfaceKHR{ nullptr };
 	// unfortunately glfw surface creation does not work with the vulkan c++20 modules
+    vk::raii::SurfaceKHR surfaceKHR{ nullptr };
 #ifdef _WIN32
 	vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
     surfaceKHR = std::move(vk::raii::SurfaceKHR { instance, win32SurfaceCreateInfoKHR });
@@ -239,28 +271,18 @@ int main(int argc, char *argv[])
 
     vk::raii::PhysicalDevices physicalDevices{ instance };
     const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
-    auto memoryProperties = physicalDevice.getMemoryProperties();
+
     // queue
     auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
-    constexpr float priority = 1.0f;
-    vk::DeviceQueueCreateInfo deviceQueueCreateInfo{ {}, queueFamilyIndex.value(), 1, &priority };
     // extensions
     std::vector dExtensions { vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
 	// features
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
     vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &bufferDeviceAddressFeatures };
-
-    vk::DeviceCreateInfo deviceCreateInfo;
-    deviceCreateInfo.setQueueCreateInfos({ deviceQueueCreateInfo });
-    deviceCreateInfo.setPEnabledExtensionNames(dExtensions);
-    deviceCreateInfo.setPNext(&shaderObjectFeatures);
-    vk::raii::Device device{ physicalDevice, deviceCreateInfo };
-
-    // queue
-    vk::raii::Queue queue{ device, queueFamilyIndex.value(), 0 };
+    Device device{ physicalDevice, dExtensions, {{queueFamilyIndex.value(), 1}}, &shaderObjectFeatures };
 
 	// setup vertex buffer
     std::vector vertices = {
@@ -269,6 +291,7 @@ int main(int argc, char *argv[])
     	 0.0f,  0.5f, 0.0f, 1.0f
     };
     const size_t verticesSize = vertices.size() * sizeof(float);
+    auto memoryProperties = physicalDevice.getMemoryProperties();
     Buffer buffer{ device, memoryProperties, verticesSize, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible};
     void* p = buffer.memory.mapMemory(0, vk::WholeSize);
     std::memcpy(p, vertices.data(), verticesSize);
