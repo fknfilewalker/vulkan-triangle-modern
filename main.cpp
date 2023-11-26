@@ -419,30 +419,28 @@ int main(int argc, char *argv[])
 
         cmdBuffer.beginRendering({ {}, { {}, {window_width, window_height} }, 1, 0, 1, &rAttachmentInfo });
 
-        cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, { *shaders[0], *shaders[1] });
-        cmdBuffer.pushConstants<uint64_t>(*layout, vk::ShaderStageFlagBits::eVertex, 0, { buffer.deviceAddress });
-
-        cmdBuffer.setPrimitiveTopologyEXT(vk::PrimitiveTopology::eTriangleList);
-        cmdBuffer.setPolygonModeEXT(vk::PolygonMode::eFill);
-        cmdBuffer.setFrontFaceEXT(vk::FrontFace::eCounterClockwise);
-        cmdBuffer.setCullModeEXT(vk::CullModeFlagBits::eNone);
-
-        cmdBuffer.setColorWriteMaskEXT(0, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB);
-        cmdBuffer.setViewportWithCountEXT({ { 0, 0, window_width, window_height } });
-        cmdBuffer.setScissorWithCountEXT({ { {0, 0}, {window_width, window_height} } });
-
-        cmdBuffer.setVertexInputEXT({}, {});
-        cmdBuffer.setSampleMaskEXT(vk::SampleCountFlagBits::e1, { 0xffffffff });
-        cmdBuffer.setColorBlendEnableEXT(0, { vk::False });
-        cmdBuffer.setDepthTestEnableEXT(vk::False);
-        cmdBuffer.setDepthWriteEnableEXT(vk::False);
-        cmdBuffer.setDepthBiasEnableEXT(vk::False);
-        cmdBuffer.setStencilTestEnableEXT(vk::False);
-
-        cmdBuffer.setRasterizerDiscardEnableEXT(vk::False);
-        cmdBuffer.setAlphaToCoverageEnableEXT(vk::False);
-        cmdBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
-        cmdBuffer.setPrimitiveRestartEnableEXT(vk::False);
+        {
+            cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, { *shaders[0], *shaders[1] });
+            cmdBuffer.pushConstants<uint64_t>(*layout, vk::ShaderStageFlagBits::eVertex, 0, { buffer.deviceAddress });
+            cmdBuffer.setPrimitiveTopologyEXT(vk::PrimitiveTopology::eTriangleList);
+            cmdBuffer.setPolygonModeEXT(vk::PolygonMode::eFill);
+            cmdBuffer.setFrontFaceEXT(vk::FrontFace::eCounterClockwise);
+            cmdBuffer.setCullModeEXT(vk::CullModeFlagBits::eNone);
+            cmdBuffer.setColorWriteMaskEXT(0, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB);
+            cmdBuffer.setSampleMaskEXT(vk::SampleCountFlagBits::e1, { 0xffffffff });
+            cmdBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
+            cmdBuffer.setViewportWithCountEXT({ { 0, 0, window_width, window_height } });
+            cmdBuffer.setScissorWithCountEXT({ { {0, 0}, { window_width, window_height } } });
+            cmdBuffer.setVertexInputEXT({}, {});
+            cmdBuffer.setColorBlendEnableEXT(0, { vk::False });
+            cmdBuffer.setDepthTestEnableEXT(vk::False);
+            cmdBuffer.setDepthWriteEnableEXT(vk::False);
+            cmdBuffer.setDepthBiasEnableEXT(vk::False);
+            cmdBuffer.setStencilTestEnableEXT(vk::False);
+            cmdBuffer.setRasterizerDiscardEnableEXT(vk::False);
+            cmdBuffer.setAlphaToCoverageEnableEXT(vk::False);
+            cmdBuffer.setPrimitiveRestartEnableEXT(vk::False);
+        }
 
         cmdBuffer.draw(3, 1, 0, 0);
 
