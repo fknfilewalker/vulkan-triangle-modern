@@ -10,8 +10,8 @@ import vulkan_hpp;
 #include <unordered_map>
 
 constexpr bool fullscreen = false;
-constexpr int window_width = 800;
-constexpr int window_height = 600;
+constexpr uint32_t window_width = 800;
+constexpr uint32_t window_height = 600;
 
 const char* vertexShader = R"(
 #version 450
@@ -91,12 +91,9 @@ struct Device
         for (const auto& [queueFamilyIndex, queueCount] : queues) {
             deviceQueueCreateInfos.emplace_back(vk::DeviceQueueCreateInfo{ {}, queueFamilyIndex, queueCount, &priority });
         }
-        vk::DeviceCreateInfo deviceCreateInfo;
-        deviceCreateInfo.setQueueCreateInfos(deviceQueueCreateInfos);
-        deviceCreateInfo.setPEnabledExtensionNames(extensions);
-        deviceCreateInfo.setPNext(pNext);
+        const vk::DeviceCreateInfo deviceCreateInfo{ {}, deviceQueueCreateInfos, {}, extensions,{}, pNext };
         device = std::move(vk::raii::Device{ physicalDevice, deviceCreateInfo });
-
+        // get queues
         for (const auto& [queueFamilyIndex, queueCount] : queues) {
             std::vector<vk::raii::Queue> queueFamily;
             queueFamily.reserve(queueCount);
@@ -168,8 +165,9 @@ struct Swapchain
         const auto surfaceFormats = device.physicalDevice.getSurfaceFormatsKHR(*surface);
 
         imageCount = std::min(3u, surfaceCapabilities.maxImageCount);
+        extent = surfaceCapabilities.currentExtent;
         const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ {}, *surface, imageCount,
-            surfaceFormats[0].format, surfaceFormats[0].colorSpace, surfaceCapabilities.currentExtent,
+            surfaceFormats[0].format, surfaceFormats[0].colorSpace, extent,
             1u, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst };
         swapchainKHR = std::move(vk::raii::SwapchainKHR{ device, swapchainCreateInfoKHR });
 
@@ -215,11 +213,12 @@ struct Swapchain
     }
 
     uint32_t imageCount;
+    vk::Extent2D extent;
     uint32_t currentImageIdx;
     uint32_t previousImageIdx;
     std::vector<Frame> frames;
     vk::raii::SwapchainKHR swapchainKHR;
-    vk::raii::CommandPool commandPool;
+    const vk::raii::CommandPool commandPool;
     vk::raii::CommandBuffers commandBuffers;
 };
 
@@ -294,14 +293,14 @@ int main(int /*argc*/, char* /*argv[]*/)
     // * create device
     Device device{ physicalDevice, dExtensions, {{queueFamilyIndex.value(), 1}}, &physicalDeviceFeatures2 };
 
-    // Vertex buffer setup
+    // Vertex buffer setup (triangle is upside down on purpose)
     std::vector vertices = {
         -0.5f, -0.5f, 0.0f,
          0.5f, -0.5f, 0.0f,
          0.0f,  0.5f, 0.0f
     };
     const size_t verticesSize = vertices.size() * sizeof(float);
-    Buffer buffer{ device, verticesSize, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible };
+    const Buffer buffer{ device, verticesSize, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible };
     void* p = buffer.memory.mapMemory(0, vk::WholeSize);
     std::memcpy(p, vertices.data(), verticesSize);
     buffer.memory.unmapMemory();
@@ -352,7 +351,7 @@ int main(int /*argc*/, char* /*argv[]*/)
         rAttachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
         rAttachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
 
-        cmdBuffer.beginRendering({ {}, { {}, {window_width, window_height} }, 1, 0, 1, &rAttachmentInfo });
+        cmdBuffer.beginRendering({ {}, { {}, swapchain.extent }, 1, 0, 1, &rAttachmentInfo });
         {
             cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, { *shaders[0], *shaders[1] });
             cmdBuffer.pushConstants<uint64_t>(*layout, vk::ShaderStageFlagBits::eVertex, 0, { buffer.deviceAddress });
@@ -363,8 +362,8 @@ int main(int /*argc*/, char* /*argv[]*/)
             cmdBuffer.setColorWriteMaskEXT(0, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB);
             cmdBuffer.setSampleMaskEXT(vk::SampleCountFlagBits::e1, { 0xffffffff });
             cmdBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
-            cmdBuffer.setViewportWithCountEXT({ { 0, 0, window_width, window_height } });
-            cmdBuffer.setScissorWithCountEXT({ { {0, 0}, { window_width, window_height } } });
+            cmdBuffer.setViewportWithCountEXT({ { 0, 0, static_cast<float>(swapchain.extent.width), static_cast<float>(swapchain.extent.height) } });
+            cmdBuffer.setScissorWithCountEXT({ { {0, 0}, swapchain.extent } });
             cmdBuffer.setVertexInputEXT({}, {});
             cmdBuffer.setColorBlendEnableEXT(0, { vk::False });
             cmdBuffer.setDepthTestEnableEXT(vk::False);
