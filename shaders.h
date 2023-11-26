@@ -1,7 +1,8 @@
 #pragma once
+#include <vector>
 
 // glslangValidator -V -o vertexShader.h --vn vertexShaderSPV triangle.vert
-const uint32_t vertexShaderSPV[] = {
+const std::vector<uint32_t> vertexShaderSPV {
     0x07230203,0x00010000,0x0008000b,0x00000034,0x00000000,0x00020011,0x00000001,0x00020011,
     0x0000000b,0x00020011,0x000014e3,0x0009000a,0x5f565053,0x5f52484b,0x73796870,0x6c616369,
     0x6f74735f,0x65676172,0x6675625f,0x00726566,0x0006000b,0x00000001,0x4c534c47,0x6474732e,
@@ -58,7 +59,7 @@ const uint32_t vertexShaderSPV[] = {
 };
 
 // glslangValidator -V -o fragmentShader.h --vn fragmentShaderSPV triangle.frag
-const uint32_t fragmentShaderSPV[] = {
+const std::vector<uint32_t> fragmentShaderSPV = {
     0x07230203,0x00010000,0x0008000b,0x0000000d,0x00000000,0x00020011,0x00000001,0x0006000b,
     0x00000001,0x4c534c47,0x6474732e,0x3035342e,0x00000000,0x0003000e,0x00000000,0x00000001,
     0x0006000f,0x00000004,0x00000004,0x6e69616d,0x00000000,0x00000009,0x00030010,0x00000004,

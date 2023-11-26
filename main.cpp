@@ -310,28 +310,25 @@ int main(int /*argc*/, char* /*argv[]*/)
     constexpr vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
 
     vk::ShaderCreateInfoEXT shaderCreateInfoVertex = { vk::ShaderCreateFlagBitsEXT::eLinkStage, vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment };
-    shaderCreateInfoVertex.codeType = vk::ShaderCodeTypeEXT::eSpirv;
-    shaderCreateInfoVertex.pName = "main";
-    shaderCreateInfoVertex.pCode = vertexShaderSPV;
-    shaderCreateInfoVertex.codeSize = sizeof(vertexShaderSPV);
     shaderCreateInfoVertex.setPushConstantRanges({ pcRange });
+    shaderCreateInfoVertex.setCodeType(vk::ShaderCodeTypeEXT::eSpirv);
+    shaderCreateInfoVertex.setPName("main");
+    shaderCreateInfoVertex.setCode<uint32_t>(vertexShaderSPV);
 
     vk::ShaderCreateInfoEXT shaderCreateInfoFragment = { vk::ShaderCreateFlagBitsEXT::eLinkStage, vk::ShaderStageFlagBits::eFragment, {} };
-    shaderCreateInfoFragment.codeType = vk::ShaderCodeTypeEXT::eSpirv;
-    shaderCreateInfoFragment.pName = "main";
-    shaderCreateInfoFragment.pCode = fragmentShaderSPV;
-    shaderCreateInfoFragment.codeSize = sizeof(fragmentShaderSPV);
     shaderCreateInfoFragment.setPushConstantRanges({ pcRange });
-    std::vector<vk::raii::ShaderEXT> shaders = device.device.createShadersEXT({ shaderCreateInfoVertex, shaderCreateInfoFragment });
-    vk::raii::PipelineLayout layout{ device, {{}, 0, {}, 1, &pcRange} };
+    shaderCreateInfoFragment.setCodeType(vk::ShaderCodeTypeEXT::eSpirv);
+    shaderCreateInfoFragment.setPName("main");
+    shaderCreateInfoFragment.setCode<uint32_t>(fragmentShaderSPV);
+    const std::vector<vk::raii::ShaderEXT> shaders = device.device.createShadersEXT({ shaderCreateInfoVertex, shaderCreateInfoFragment });
+    const vk::raii::PipelineLayout layout{ device, {{}, 0, {}, 1, &pcRange} };
 
     Swapchain swapchain{ device, surfaceKHR, queueFamilyIndex.value() };
     constexpr vk::ImageSubresourceRange imageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
     vk::ImageMemoryBarrier2 imageMemoryBarrier{};
-    imageMemoryBarrier.subresourceRange = imageSubresourceRange;
+    imageMemoryBarrier.setSubresourceRange(imageSubresourceRange);
     vk::DependencyInfoKHR dependencyInfo{};
-    dependencyInfo.imageMemoryBarrierCount = 1;
-    dependencyInfo.pImageMemoryBarriers = &imageMemoryBarrier;
+    dependencyInfo.setImageMemoryBarriers({ imageMemoryBarrier });
 
     while (!glfwWindowShouldClose(window))
     {
