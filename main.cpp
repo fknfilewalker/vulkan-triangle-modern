@@ -107,10 +107,10 @@ struct Device
     operator const vk::raii::Device& () const { return device; }
     operator const vk::raii::PhysicalDevice& () const { return physicalDevice; }
 
-    std::optional<uint32_t> findMemoryTypeIndex(const vk::MemoryRequirements& memoryRequirements, const vk::MemoryPropertyFlags properties) const
+    std::optional<uint32_t> findMemoryTypeIndex(const vk::MemoryRequirements& requirements, const vk::MemoryPropertyFlags properties) const
     {
         for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i) {
-            if ((memoryRequirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) return i;
+            if ((requirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) return i;
         }
         return std::nullopt;
     }
@@ -123,12 +123,11 @@ struct Device
 
 struct Buffer
 {
-    Buffer(const Device& device, const vk::DeviceSize size,
-        const vk::BufferUsageFlags usageFlags, const vk::MemoryPropertyFlags memoryPropertiesFlags)
+    Buffer(const Device& device, const vk::DeviceSize size, const vk::BufferUsageFlags usageFlags, const vk::MemoryPropertyFlags memoryPropertyFlags)
         : buffer{ device, { {}, size, usageFlags | vk::BufferUsageFlagBits::eShaderDeviceAddress } }, memory{ nullptr }
     {
         const auto memoryRequirements = buffer.getMemoryRequirements();
-        const auto memoryTypeIndex = device.findMemoryTypeIndex(memoryRequirements, memoryPropertiesFlags);
+        const auto memoryTypeIndex = device.findMemoryTypeIndex(memoryRequirements, memoryPropertyFlags);
         if (!memoryTypeIndex.has_value()) exitWithError("No memory type index found");
         constexpr vk::MemoryAllocateFlagsInfo memoryAllocateFlagsInfo{ vk::MemoryAllocateFlagBits::eDeviceAddress };
         const vk::MemoryAllocateInfo memoryAllocateInfo{ memoryRequirements.size, memoryTypeIndex.value(), &memoryAllocateFlagsInfo };
@@ -138,7 +137,7 @@ struct Buffer
         const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo{ *buffer };
         deviceAddress = device.device.getBufferAddress(bufferDeviceAddressInfo);
     }
-    vk::raii::Buffer buffer;
+    const vk::raii::Buffer buffer;
     vk::raii::DeviceMemory memory;
     vk::DeviceAddress deviceAddress;
 };
@@ -162,13 +161,11 @@ struct Swapchain
         vk::raii::CommandBuffer& commandBuffer;
     };
 
-    Swapchain(const vk::raii::Device& device, const vk::raii::PhysicalDevice& physicalDevice,
-        const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : currentImageIdx{ 0 }, previousImageIdx{ 0 }, swapchainKHR{ nullptr },
+    Swapchain(const Device& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : currentImageIdx{ 0 }, previousImageIdx{ 0 }, swapchainKHR{ nullptr },
         commandPool{ device, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }, commandBuffers{ nullptr }
     {
-        const auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
-        const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR(*surface);
-        auto surfacePresentModes = physicalDevice.getSurfacePresentModesKHR(*surface);
+        const auto surfaceCapabilities = device.physicalDevice.getSurfaceCapabilitiesKHR(*surface);
+        const auto surfaceFormats = device.physicalDevice.getSurfaceFormatsKHR(*surface);
 
         imageCount = std::min(3u, surfaceCapabilities.maxImageCount);
         const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ {}, *surface, imageCount,
@@ -184,6 +181,7 @@ struct Swapchain
 
     const Frame& getCurrentFrame() { return frames[currentImageIdx]; }
     const Frame& getPreviousFrame() { return frames[previousImageIdx]; }
+
     void acquireNextImage(const vk::raii::Device& device) {
         const auto nextImage = swapchainKHR.acquireNextImage(0, *frames[currentImageIdx].nextImageAvailableSemaphore);
         resultCheck(nextImage.first, "acquireing next swapchain image error");
@@ -195,6 +193,7 @@ struct Swapchain
         device.resetFences({ *frame.inFlightFence });
         frame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
     }
+
     void submitImage(const vk::raii::Queue& presentQueue)
     {
         const Frame& curFrame = getCurrentFrame();
@@ -309,7 +308,7 @@ int main(int /*argc*/, char* /*argv[]*/)
 
     // setup shader objects
     // https://github.com/KhronosGroup/Vulkan-Docs/blob/main/proposals/VK_EXT_shader_object.adoc
-    vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
+    constexpr vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
 
     vk::ShaderCreateInfoEXT shaderCreateInfoVertex = { vk::ShaderCreateFlagBitsEXT::eLinkStage, vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment };
     shaderCreateInfoVertex.codeType = vk::ShaderCodeTypeEXT::eSpirv;
@@ -327,7 +326,7 @@ int main(int /*argc*/, char* /*argv[]*/)
     std::vector<vk::raii::ShaderEXT> shaders = device.device.createShadersEXT({ shaderCreateInfoVertex, shaderCreateInfoFragment });
     vk::raii::PipelineLayout layout{ device, {{}, 0, {}, 1, &pcRange} };
 
-    Swapchain swapchain{ device, physicalDevice, surfaceKHR, queueFamilyIndex.value() };
+    Swapchain swapchain{ device, surfaceKHR, queueFamilyIndex.value() };
     constexpr vk::ImageSubresourceRange imageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
     vk::ImageMemoryBarrier2 imageMemoryBarrier{};
     imageMemoryBarrier.subresourceRange = imageSubresourceRange;
