@@ -25,11 +25,11 @@ const uint64_t sizeOfVec3 = 3ul * sizeOfFloat;
 
 layout(buffer_reference, scalar) readonly buffer Vertex
 {
-    vec3 position;
+	vec3 position;
 };
 layout(push_constant, scalar) uniform pushConstant
 {
-    uint64_t vertexPtr;
+	uint64_t vertexPtr;
 };
 
 void main() {
@@ -222,6 +222,7 @@ struct Swapchain
     vk::raii::CommandBuffers commandBuffers;
 };
 
+// Not used
 std::string loadFile(const std::string_view path)
 {
     std::ifstream in{ path.data() };
@@ -264,7 +265,7 @@ int main(int /*argc*/, char* /*argv[]*/)
 #endif
     vk::raii::Instance instance(context, instanceCreateInfo);
 
-    // unfortunately glfw surface creation does not work with the vulkan c++20 modules
+    // unfortunately glfw surface creation does not work with the vulkan c++20 module
     vk::raii::SurfaceKHR surfaceKHR{ nullptr };
 #ifdef _WIN32
     vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
