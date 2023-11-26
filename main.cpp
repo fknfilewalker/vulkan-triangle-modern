@@ -407,6 +407,7 @@ int main(int argc, char *argv[])
     while(!glfwWindowShouldClose(window))
     {
     	glfwPollEvents();
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GLFW_TRUE);
         swapchain.acquireNextImage(device);
         const auto& cFrame = swapchain.getCurrentFrame();
         const auto& cmdBuffer = cFrame.commandBuffer;
