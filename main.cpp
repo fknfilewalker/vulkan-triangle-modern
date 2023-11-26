@@ -298,7 +298,7 @@ const uint32_t fragmentShaderSPV[] = {
     0x00000003,0x000200f8,0x00000005,0x0003003e,0x00000009,0x0000000c,0x000100fd,0x00010038
 };
 
-int main(int argc, char *argv[])
+int main(int /*argc*/, char* /*argv[]*/)
 {
     if (!glfwInit()) exitWithError("Failed to init GLFW");
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // No need to create a graphics context for Vulkan
@@ -311,10 +311,10 @@ int main(int argc, char *argv[])
     constexpr vk::ApplicationInfo applicationInfo{nullptr, 0, nullptr, 0, vk::ApiVersion13};
     
     std::vector<const char*> iExtensions;
-    uint32_t glfw_instance_extensions_count;
-    const char** glfw_instance_extensions_names = glfwGetRequiredInstanceExtensions(&glfw_instance_extensions_count);
-    iExtensions.reserve(glfw_instance_extensions_count + 1);
-    for (uint32_t i = 0; i < glfw_instance_extensions_count; ++i) iExtensions.emplace_back(glfw_instance_extensions_names[i]);
+    uint32_t glfwInstanceExtensionCount;
+    const char** glfwInstanceExtensionNames = glfwGetRequiredInstanceExtensions(&glfwInstanceExtensionCount);
+    iExtensions.reserve(glfwInstanceExtensionCount + 1);
+    for (uint32_t i = 0; i < glfwInstanceExtensionCount; ++i) iExtensions.emplace_back(glfwInstanceExtensionNames[i]);
 
 #ifdef __APPLE__
     iExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
@@ -350,6 +350,7 @@ int main(int argc, char *argv[])
     auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
+    if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surfaceKHR)) exitWithError("Queue family does not support presentation");
     // * check extensions
     std::vector dExtensions { vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
