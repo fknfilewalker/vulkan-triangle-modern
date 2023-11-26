@@ -53,11 +53,11 @@ void exitWithError(const std::string_view error) {
 
 template<typename T>
 bool extensionsOrLayersAvailable(const std::vector<T>& available, const std::vector<const char*>& requested) {
+    static_assert(std::is_same_v<vk::LayerProperties, T> || std::is_same_v<vk::ExtensionProperties, T>);
     return std::all_of(requested.begin(), requested.end(), [&available](const char* requestedElement) {
         return std::find_if(available.begin(), available.end(), [requestedElement](const T& availableElement) {
             if constexpr (std::is_same_v<vk::LayerProperties, T>) return std::string_view{ availableElement.layerName.data() }.compare(requestedElement) == 0;
             else if constexpr (std::is_same_v<vk::ExtensionProperties, T>) return std::string_view{ availableElement.extensionName.data() }.compare(requestedElement) == 0;
-            else return false;
             }) != available.end();
         });
 }
