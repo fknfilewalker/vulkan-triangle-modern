@@ -112,10 +112,11 @@ struct Swapchain
 {
     // Data for one frame/image in our swapchain
     struct Frame {
-        Frame(const vk::raii::Device& device, vk::raii::CommandBuffer& commandBuffer) :
-    		inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } },
-    		nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} },
-            renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} }, commandBuffer{ commandBuffer } {}
+        Frame(const vk::raii::Device& device, const vk::Image& image, vk::raii::CommandBuffer& commandBuffer) :
+    		image{ image }, inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } },
+    		nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} }, renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} },
+    		commandBuffer{ commandBuffer } {}
+        vk::Image image;
         vk::raii::Fence inFlightFence;
         vk::raii::Semaphore nextImageAvailableSemaphore;
         vk::raii::Semaphore renderFinishedSemaphore;
@@ -137,14 +138,13 @@ struct Swapchain
 		swapchainKHR = std::move(vk::raii::SwapchainKHR{ device, swapchainCreateInfoKHR });
 
         commandBuffers = std::move(vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } });
+        std::vector<vk::Image> images = swapchainKHR.getImages();
         frames.reserve(imageCount);
-        for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(device, (commandBuffers[i]));
-        images = swapchainKHR.getImages();
+        for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(device, images[i], commandBuffers[i]);
     }
 
     const Frame& getCurrentFrame() { return frames[currentImageIdx]; }
     const Frame& getPreviousFrame() { return frames[previousImageIdx]; }
-    const vk::Image& getCurrentImage() const { return images[currentImageIdx]; }
     void acquireNextImage(const vk::raii::Device& device) {
 	    const auto nextImage = swapchainKHR.acquireNextImage(0, *frames[currentImageIdx].nextImageAvailableSemaphore);
         resultCheck(nextImage.first, "acquireing next swapchain image error");
@@ -180,7 +180,6 @@ struct Swapchain
     uint32_t currentImageIdx;
     uint32_t previousImageIdx;
     std::vector<Frame> frames;
-    std::vector<vk::Image> images;
     vk::raii::SwapchainKHR swapchainKHR;
     vk::raii::CommandPool commandPool;
     vk::raii::CommandBuffers commandBuffers;
@@ -276,8 +275,9 @@ int main(int argc, char *argv[])
 	// * activate features
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
     vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &bufferDeviceAddressFeatures };
+    vk::PhysicalDeviceSynchronization2Features synchronization2Features{ true, &shaderObjectFeatures };
     // * create device
-    Device device{ physicalDevice, dExtensions, {{queueFamilyIndex.value(), 1}}, &shaderObjectFeatures };
+    Device device{ physicalDevice, dExtensions, {{queueFamilyIndex.value(), 1}}, &synchronization2Features };
 
 	// Vertex buffer setup
     std::vector vertices = {
@@ -313,14 +313,28 @@ int main(int argc, char *argv[])
     //vk::raii::ShaderEXT shader{ device, sci[0] };
 
     Swapchain swapchain{ device, physicalDevice, surfaceKHR, queueFamilyIndex.value() };
+    constexpr vk::ImageSubresourceRange imageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+    vk::ImageMemoryBarrier2 imageMemoryBarrier{};
+    imageMemoryBarrier.subresourceRange = imageSubresourceRange;
+    vk::DependencyInfoKHR dependencyInfo{};
+    dependencyInfo.imageMemoryBarrierCount = 1;
+    dependencyInfo.pImageMemoryBarriers = &imageMemoryBarrier;
 
     while(!glfwWindowShouldClose(window))
     {
     	glfwPollEvents();
         swapchain.acquireNextImage(device);
         const auto& cFrame = swapchain.getCurrentFrame();
-	    constexpr vk::ImageSubresourceRange imageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
-        cFrame.commandBuffer.clearColorImage(swapchain.getCurrentImage(), vk::ImageLayout::eUndefined, { 1.0f, 0.0f, 0.0f, 1.0f }, imageSubresourceRange);
+        imageMemoryBarrier.image = cFrame.image;
+        imageMemoryBarrier.oldLayout = vk::ImageLayout::eUndefined;
+        imageMemoryBarrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+        cFrame.commandBuffer.pipelineBarrier2(dependencyInfo);
+	    
+        cFrame.commandBuffer.clearColorImage(cFrame.image, vk::ImageLayout::eTransferDstOptimal, { 1.0f, 0.0f, 0.0f, 1.0f }, imageSubresourceRange);
+
+        imageMemoryBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+        imageMemoryBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+        cFrame.commandBuffer.pipelineBarrier2(dependencyInfo);
         swapchain.submitImage(device.queue[queueFamilyIndex.value()][0]);
 	}
     device.device.waitIdle();
