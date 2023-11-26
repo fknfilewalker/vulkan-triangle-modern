@@ -45,7 +45,7 @@ set_target_properties(glfw update_mappings PROPERTIES FOLDER "${VTM_EXTERNAL_FOL
 #================================#
 # Main Target                    #
 #================================#
-add_executable(${PROJECT_NAME} main.cpp shaders.h)
+add_executable(${PROJECT_NAME} src/main.cpp src/shaders.h)
 target_link_libraries(${PROJECT_NAME} PRIVATE VulkanCppModule glfw)
 add_dependencies(${PROJECT_NAME} VulkanCppModule glfw)
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
