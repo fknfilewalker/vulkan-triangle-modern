@@ -113,10 +113,14 @@ struct Swapchain
     // Data for one frame/image in our swapchain
     struct Frame {
         Frame(const vk::raii::Device& device, const vk::Image& image, vk::raii::CommandBuffer& commandBuffer) :
-    		image{ image }, inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } },
-    		nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} }, renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} },
-    		commandBuffer{ commandBuffer } {}
+    		image{ image }, imageView{nullptr}, inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } },
+    		nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} }, renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} }, commandBuffer{ commandBuffer }
+        {
+            imageView = std::move(vk::raii::ImageView{ device, vk::ImageViewCreateInfo{ {}, image, vk::ImageViewType::e2D, vk::Format::eB8G8R8A8Unorm, 
+                {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } });
+        }
         vk::Image image;
+        vk::raii::ImageView imageView;
         vk::raii::Fence inFlightFence;
         vk::raii::Semaphore nextImageAvailableSemaphore;
         vk::raii::Semaphore renderFinishedSemaphore;
@@ -347,7 +351,8 @@ int main(int argc, char *argv[])
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
     vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &bufferDeviceAddressFeatures };
     vk::PhysicalDeviceSynchronization2Features synchronization2Features{ true, &shaderObjectFeatures };
-    vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2{ {}, &synchronization2Features };
+    vk::PhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{ true, &synchronization2Features };
+    vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2{ {}, &dynamicRenderingFeatures };
     physicalDeviceFeatures2.features.shaderInt64 = true;
     // * create device
     Device device{ physicalDevice, dExtensions, {{queueFamilyIndex.value(), 1}}, &physicalDeviceFeatures2 };
@@ -401,29 +406,22 @@ int main(int argc, char *argv[])
 
         imageMemoryBarrier.image = cFrame.image;
         imageMemoryBarrier.oldLayout = vk::ImageLayout::eUndefined;
-        imageMemoryBarrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+        imageMemoryBarrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
         cmdBuffer.pipelineBarrier2(dependencyInfo);
-
-        cmdBuffer.clearColorImage(cFrame.image, vk::ImageLayout::eTransferDstOptimal, { 1.0f, 0.0f, 0.0f, 1.0f }, imageSubresourceRange);
 
         cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, { *shaders[0], *shaders[1] });
         cmdBuffer.pushConstants<uint64_t>(*layout, vk::ShaderStageFlagBits::eVertex, 0, buffer.deviceAddress);
         //cmdBuffer.draw(3, 1, 0, 0);
 
-        vk::RenderingInfo renderingInfo{};
+        vk::RenderingAttachmentInfo rai { *cFrame.imageView, vk::ImageLayout::eColorAttachmentOptimal };
+        rai.clearValue.color = { 1.0f, 0.0f, 0.0f, 1.0f };
+        rai.loadOp = vk::AttachmentLoadOp::eClear;
+        rai.storeOp = vk::AttachmentStoreOp::eStore;
 
-        vk::RenderingAttachmentInfo rai{};
-        /*rai.imageView = aColorAttachment.image->getImageView();
-        rai.imageLayout = aColorAttachment.image->getLayout();
-        rai.clearValue.color = aColorAttachment.clearValue;
-        rai.loadOp = aColorAttachment.loadOp;
-        rai.storeOp = aColorAttachment.storeOp;*/
+        cmdBuffer.beginRendering({ {}, { {}, {800,600} }, 1, 0, 1, &rai });
+        cmdBuffer.endRendering();
 
-        //cmdBuffer.beginRendering({ {}, { {}, {800,600} }, 1, 0, {} });
-
-        //cmdBuffer.endRendering();
-
-        imageMemoryBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+        imageMemoryBarrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
         imageMemoryBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
         cmdBuffer.pipelineBarrier2(dependencyInfo);
         swapchain.submitImage(device.queue[queueFamilyIndex.value()][0]);
