@@ -41,9 +41,9 @@ std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyPr
     std::optional<uint32_t> bestFamily;
     std::bitset<12> bestScore = 0;
     for (uint32_t i = 0; i < queueFamiliesProperties.size(); i++) {
-        const std::bitset<12> score = static_cast<uint32_t>(queueFamiliesProperties[i].queueFlags);
 		// check if queue family supports all requested queue flags
         if (static_cast<uint32_t>(queueFamiliesProperties[i].queueFlags & queueFlags) == static_cast<uint32_t>(queueFlags)) {
+			const std::bitset<12> score = static_cast<uint32_t>(queueFamiliesProperties[i].queueFlags);
             // use queue family with the least other bits set
             if (!bestFamily.has_value() || score.count() < bestScore.count()) {
                 bestFamily = i;
@@ -57,13 +57,12 @@ std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyPr
 struct Device
 {
     Device(const vk::raii::PhysicalDevice& physicalDevice, const std::vector<const char*>& extensions, 
-        const std::unordered_map<uint16_t, uint16_t>& queues, const void* pNext) : device{nullptr}
+           const std::unordered_map<uint16_t, uint16_t>& queues, const void* pNext) : device{nullptr}, physicalDevice{physicalDevice}
     {
 	    constexpr float priority = 1.0f;
         std::vector<vk::DeviceQueueCreateInfo> deviceQueueCreateInfos;
         deviceQueueCreateInfos.reserve(queues.size());
-        for (const auto& [queueFamilyIndex, queueCount] : queues)
-        {
+        for (const auto& [queueFamilyIndex, queueCount] : queues) {
         	deviceQueueCreateInfos.emplace_back(vk::DeviceQueueCreateInfo{ {}, queueFamilyIndex, queueCount, &priority });
 		}
         vk::DeviceCreateInfo deviceCreateInfo;
@@ -80,22 +79,19 @@ struct Device
 		}
 	}
 	operator const vk::raii::Device&() const { return device; }
+    operator const vk::raii::PhysicalDevice&() const { return physicalDevice; }
 
 	vk::raii::Device device;
     std::vector<std::vector<vk::raii::Queue>> queue;
-    //vk::raii::PhysicalDevice physicalDevice;
+    vk::raii::PhysicalDevice physicalDevice;
 };
 
 struct Buffer
 {
-    Buffer(const vk::raii::Device& device, const vk::PhysicalDeviceMemoryProperties& memoryProperties,
-        const vk::DeviceSize size, vk::BufferUsageFlags usageFlags, const vk::MemoryPropertyFlags memoryPropertiesFlags)
-		: buffer{nullptr}, memory{nullptr}, deviceAddress{0}
+    Buffer(const vk::raii::Device& device, const vk::PhysicalDeviceMemoryProperties& memoryProperties, const vk::DeviceSize size,
+           const vk::BufferUsageFlags usageFlags, const vk::MemoryPropertyFlags memoryPropertiesFlags)
+		: buffer{ device, { {}, size, usageFlags | vk::BufferUsageFlagBits::eShaderDeviceAddress } }, memory{nullptr}
     {
-        usageFlags |= vk::BufferUsageFlagBits::eShaderDeviceAddress;
-        const vk::BufferCreateInfo bufferCreateInfo{ {}, size, usageFlags };
-        buffer = std::move(vk::raii::Buffer{ device, bufferCreateInfo });
-
         const auto memoryRequirements = buffer.getMemoryRequirements();
         const auto memoryTypeIndex = findMemoryTypeIndex(memoryProperties, memoryRequirements, memoryPropertiesFlags);
         if (!memoryTypeIndex.has_value()) exitWithError("No memory type index found");
@@ -114,80 +110,77 @@ struct Buffer
 
 struct Swapchain
 {
-	Swapchain(const vk::raii::Device& device, const vk::raii::PhysicalDevice& physicalDevice,
-        const vk::raii::SurfaceKHR& surface, uint32_t queueFamilyIndex) : swapchainKHR{nullptr},
-		commandPool{ device, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } },
-		commandBuffers{nullptr}
-	{
-		const auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
-		const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR(*surface);
-        auto surfacePresentModes = physicalDevice.getSurfacePresentModesKHR(*surface);
-
-        const uint32_t imageCount = std::min(3u, surfaceCapabilities.maxImageCount);
-		const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR {{}, *surface, imageCount,
-			surfaceFormats[0].format, surfaceFormats[0].colorSpace, surfaceCapabilities.currentExtent,
-			1u, vk::ImageUsageFlagBits::eColorAttachment};
-		swapchainKHR = std::move(vk::raii::SwapchainKHR{ device, swapchainCreateInfoKHR });
-
-        commandBuffers = std::move(vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } });
-        frames.reserve(imageCount);
-        for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(device, (commandBuffers[i]));
-    }
+    // Data for one frame/image in our swapchain
     struct Frame {
-        Frame(const vk::raii::Device& device, vk::raii::CommandBuffer& commandBuffer) : inFlightFence{ nullptr }, nextImageAvailableSemaphore{ nullptr },
-			renderFinishedSemaphore{ nullptr }, commandBuffer{ commandBuffer }
-        {
-            inFlightFence = std::move(device.createFence(vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled }));
-            nextImageAvailableSemaphore = std::move(device.createSemaphore(vk::SemaphoreCreateInfo{}));
-            renderFinishedSemaphore = std::move(device.createSemaphore(vk::SemaphoreCreateInfo{}));
-        }
+        Frame(const vk::raii::Device& device, vk::raii::CommandBuffer& commandBuffer) :
+    		inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } },
+    		nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} },
+            renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} }, commandBuffer{ commandBuffer } {}
         vk::raii::Fence inFlightFence;
         vk::raii::Semaphore nextImageAvailableSemaphore;
         vk::raii::Semaphore renderFinishedSemaphore;
         vk::raii::CommandBuffer& commandBuffer;
     };
 
-    Frame& getCurrentFrame() { return frames[currentFrame]; }
+	Swapchain(const vk::raii::Device& device, const vk::raii::PhysicalDevice& physicalDevice,
+        const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : currentImageIdx{0}, previousImageIdx{0}, swapchainKHR{nullptr},
+		commandPool{ device, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }, commandBuffers{nullptr}
+	{
+		const auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
+		const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR(*surface);
+        auto surfacePresentModes = physicalDevice.getSurfacePresentModesKHR(*surface);
+
+        imageCount = std::min(3u, surfaceCapabilities.maxImageCount);
+		const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR {{}, *surface, imageCount,
+			surfaceFormats[0].format, surfaceFormats[0].colorSpace, surfaceCapabilities.currentExtent,
+			1u, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst};
+		swapchainKHR = std::move(vk::raii::SwapchainKHR{ device, swapchainCreateInfoKHR });
+
+        commandBuffers = std::move(vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } });
+        frames.reserve(imageCount);
+        for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(device, (commandBuffers[i]));
+        images = swapchainKHR.getImages();
+    }
+
+    const Frame& getCurrentFrame() { return frames[currentImageIdx]; }
+    const Frame& getPreviousFrame() { return frames[previousImageIdx]; }
+    const vk::Image& getCurrentImage() const { return images[currentImageIdx]; }
     void acquireNextImage(const vk::raii::Device& device) {
 	    const auto nextImage = swapchainKHR.acquireNextImage(0, *frames[currentImageIdx].nextImageAvailableSemaphore);
-        resultCheck(nextImage.first, "acquireNextImage error");
+        resultCheck(nextImage.first, "acquireing next swapchain image error");
     	previousImageIdx = currentImageIdx;
         currentImageIdx = nextImage.second;
 
 	    const Frame& frame = frames[currentImageIdx];
         while (vk::Result::eTimeout == device.waitForFences({ *frame.inFlightFence }, vk::True, UINT64_MAX)) {}
         device.resetFences({ *frame.inFlightFence });
-        frame.commandBuffer.begin(vk::CommandBufferBeginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+        frame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
     }
-    void submitImage(const vk::raii::Device& device)
+    void submitImage(const vk::raii::Queue& presentQueue)
     {
-        const Frame& frame = frames[currentImageIdx];
-        frame.commandBuffer.end();
+        const Frame& curFrame = getCurrentFrame();
+        curFrame.commandBuffer.end();
 
-        vk::raii::Queue queue = device.getQueue(0, 0);
-
-        std::vector<vk::PipelineStageFlags> waitDstStageMask = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
-        vk::SubmitInfo submitInfo;
-        submitInfo.setWaitSemaphores({ *frames[previousImageIdx].nextImageAvailableSemaphore });
-        submitInfo.setWaitDstStageMask(waitDstStageMask);
-        submitInfo.setSignalSemaphores({ *frame.renderFinishedSemaphore });
-        submitInfo.setCommandBuffers({ *frame.commandBuffer });
-        queue.submit({ submitInfo }, *frame.inFlightFence);
+        constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+        vk::SubmitInfo submitInfo {};
+        submitInfo.setWaitSemaphores({ *getPreviousFrame().nextImageAvailableSemaphore });
+        submitInfo.setPWaitDstStageMask(&waitDstStageMask);
+        submitInfo.setSignalSemaphores({ *curFrame.renderFinishedSemaphore });
+        submitInfo.setCommandBuffers({ *curFrame.commandBuffer });
+        presentQueue.submit({ submitInfo }, *curFrame.inFlightFence);
         
-        vk::PresentInfoKHR presentInfoKHR;
-        presentInfoKHR.setSwapchainCount(1);
+        vk::PresentInfoKHR presentInfoKHR { { *curFrame.renderFinishedSemaphore }};
         presentInfoKHR.setSwapchains({ *swapchainKHR });
-        presentInfoKHR.setWaitSemaphores({ *frame.renderFinishedSemaphore });
         presentInfoKHR.setPImageIndices(&currentImageIdx);
 
-        resultCheck(queue.presentKHR(presentInfoKHR), "present Swapchain error");
-        
+        resultCheck(presentQueue.presentKHR(presentInfoKHR), "present swapchain image error");
 	}
 
-    uint32_t currentFrame = 0;
-    uint32_t currentImageIdx = 0;
-    uint32_t previousImageIdx = 0;
+    uint32_t imageCount;
+    uint32_t currentImageIdx;
+    uint32_t previousImageIdx;
     std::vector<Frame> frames;
+    std::vector<vk::Image> images;
     vk::raii::SwapchainKHR swapchainKHR;
     vk::raii::CommandPool commandPool;
     vk::raii::CommandBuffers commandBuffers;
@@ -272,19 +265,21 @@ int main(int argc, char *argv[])
     vk::raii::PhysicalDevices physicalDevices{ instance };
     const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
 
-    // queue
+    // Device setup
+    // * find queue
     auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
-    // extensions
+    // * check extensions
     std::vector dExtensions { vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
-	// features
+	// * activate features
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
     vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &bufferDeviceAddressFeatures };
+    // * create device
     Device device{ physicalDevice, dExtensions, {{queueFamilyIndex.value(), 1}}, &shaderObjectFeatures };
 
-	// setup vertex buffer
+	// Vertex buffer setup
     std::vector vertices = {
     	-0.5f, -0.5f, 0.0f, 1.0f,
     	 0.5f, -0.5f, 0.0f, 1.0f,
@@ -322,7 +317,13 @@ int main(int argc, char *argv[])
     while(!glfwWindowShouldClose(window))
     {
     	glfwPollEvents();
+        swapchain.acquireNextImage(device);
+        const auto& cFrame = swapchain.getCurrentFrame();
+	    constexpr vk::ImageSubresourceRange imageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+        cFrame.commandBuffer.clearColorImage(swapchain.getCurrentImage(), vk::ImageLayout::eUndefined, { 1.0f, 0.0f, 0.0f, 1.0f }, imageSubresourceRange);
+        swapchain.submitImage(device.queue[queueFamilyIndex.value()][0]);
 	}
+    device.device.waitIdle();
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
