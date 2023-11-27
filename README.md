@@ -2,8 +2,8 @@
 
 Render a vulkan triangle in ~390 lines of code! (~350 without the shader code) 
 
-## Features
-* Vulkan hpp headers using c++ modules
+## Highlights
+* Vulkan hpp headers included as a c++ module
 * Dynamic rendering
 * Shader objects
 * Bindless rendering using buffer references
