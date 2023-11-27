@@ -4,7 +4,6 @@ import vulkan_hpp;
 
 #include <algorithm>
 #include <bitset>
-#include <fstream>
 #include <vector>
 #include <iostream>
 #include <unordered_map>
@@ -13,7 +12,7 @@ constexpr bool fullscreen = false;
 constexpr uint32_t window_width = 800;
 constexpr uint32_t window_height = 600;
 
-const char* vertexShader = R"(
+constexpr std::string_view vertexShader = R"(
 #version 450
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_scalar_block_layout : require
@@ -37,7 +36,7 @@ void main() {
 	gl_Position = vec4(vertex.position.xy, 0.0, 1.0);
 })";
 
-const char* fragmentShader = R"(
+constexpr std::string_view fragmentShader = R"(
 #version 450
 layout (location = 0) out vec4 fragColor;
 void main() {
@@ -105,7 +104,7 @@ struct Device
     std::optional<uint32_t> findMemoryTypeIndex(const vk::MemoryRequirements& requirements, const vk::MemoryPropertyFlags properties) const
     {
         for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i) {
-            if ((requirements.memoryTypeBits & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) return i;
+            if ((requirements.memoryTypeBits & (1u << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) return i;
         }
         return std::nullopt;
     }
@@ -178,9 +177,6 @@ struct Swapchain
         for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(device, images[i], commandBuffers[i]);
     }
 
-    const Frame& getCurrentFrame() { return frames[currentImageIdx]; }
-    const Frame& getPreviousFrame() { return frames[previousImageIdx]; }
-
     void acquireNextImage(const vk::raii::Device& device) {
         const auto nextImage = swapchainKHR.acquireNextImage(0, *frames[currentImageIdx].nextImageAvailableSemaphore);
         resultCheck(nextImage.first, "acquireing next swapchain image error");
@@ -188,8 +184,8 @@ struct Swapchain
         currentImageIdx = nextImage.second;
 
         const Frame& frame = frames[currentImageIdx];
-        while (vk::Result::eTimeout == device.waitForFences({ *frame.inFlightFence }, vk::True, UINT64_MAX)) {}
-        device.resetFences({ *frame.inFlightFence });
+        while (vk::Result::eTimeout == device.waitForFences(*frame.inFlightFence, vk::True, UINT64_MAX)) {}
+        device.resetFences(*frame.inFlightFence);
         frame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
     }
 
@@ -204,14 +200,13 @@ struct Swapchain
         submitInfo.setPWaitDstStageMask(&waitDstStageMask);
         submitInfo.setSignalSemaphores(*curFrame.renderFinishedSemaphore);
         submitInfo.setCommandBuffers(*curFrame.commandBuffer);
-        presentQueue.submit({ submitInfo }, *curFrame.inFlightFence);
+        presentQueue.submit(submitInfo, *curFrame.inFlightFence);
 
-        vk::PresentInfoKHR presentInfoKHR{ *curFrame.renderFinishedSemaphore };
-        presentInfoKHR.setSwapchains(*swapchainKHR);
-        presentInfoKHR.setPImageIndices(&currentImageIdx);
-
-        resultCheck(presentQueue.presentKHR(presentInfoKHR), "present swapchain image error");
+        resultCheck(presentQueue.presentKHR({ *curFrame.renderFinishedSemaphore,*swapchainKHR, currentImageIdx }), "present swapchain image error");
     }
+
+    const Frame& getCurrentFrame() { return frames[currentImageIdx]; }
+    const Frame& getPreviousFrame() { return frames[previousImageIdx]; }
 
     uint32_t imageCount;
     vk::Extent2D extent;
@@ -242,13 +237,6 @@ struct Shader
     std::vector<vk::ShaderEXT> shaders;
     vk::raii::PipelineLayout layout;
 };
-
-// Not used
-std::string loadFile(const std::string_view path)
-{
-    std::ifstream in{ path.data() };
-    return { (std::istreambuf_iterator{in}),std::istreambuf_iterator<char>{} };
-}
 
 int main(int /*argc*/, char* /*argv[]*/)
 {
@@ -358,7 +346,7 @@ int main(int /*argc*/, char* /*argv[]*/)
         cmdBuffer.beginRendering({ {}, { {}, swapchain.extent }, 1, 0, 1, &rAttachmentInfo });
         {
             cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, shader.shaders);
-            cmdBuffer.pushConstants<uint64_t>(*shader.layout, vk::ShaderStageFlagBits::eVertex, 0, { buffer.deviceAddress });
+            cmdBuffer.pushConstants<uint64_t>(*shader.layout, vk::ShaderStageFlagBits::eVertex, 0, buffer.deviceAddress);
             cmdBuffer.setPrimitiveTopologyEXT(vk::PrimitiveTopology::eTriangleList);
             cmdBuffer.setPolygonModeEXT(vk::PolygonMode::eFill);
             cmdBuffer.setFrontFaceEXT(vk::FrontFace::eCounterClockwise);
@@ -369,7 +357,7 @@ int main(int /*argc*/, char* /*argv[]*/)
             cmdBuffer.setViewportWithCountEXT({ { 0, 0, static_cast<float>(swapchain.extent.width), static_cast<float>(swapchain.extent.height) } });
             cmdBuffer.setScissorWithCountEXT({ { {0, 0}, swapchain.extent } });
             cmdBuffer.setVertexInputEXT({}, {});
-            cmdBuffer.setColorBlendEnableEXT(0, { vk::False });
+            cmdBuffer.setColorBlendEnableEXT(0, vk::False);
             cmdBuffer.setDepthTestEnableEXT(vk::False);
             cmdBuffer.setDepthWriteEnableEXT(vk::False);
             cmdBuffer.setDepthBiasEnableEXT(vk::False);
