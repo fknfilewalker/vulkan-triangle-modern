@@ -101,8 +101,6 @@ struct Device
             queue.emplace_back(std::move(queueFamily));
         }
     }
-    operator const vk::raii::Device& () const { return device; }
-    operator const vk::raii::PhysicalDevice& () const { return physicalDevice; }
 
     std::optional<uint32_t> findMemoryTypeIndex(const vk::MemoryRequirements& requirements, const vk::MemoryPropertyFlags properties) const
     {
@@ -111,6 +109,9 @@ struct Device
         }
         return std::nullopt;
     }
+
+    operator const vk::raii::Device& () const { return device; }
+    operator const vk::raii::PhysicalDevice& () const { return physicalDevice; }
 
     vk::raii::Device device;
     std::vector<std::vector<vk::raii::Queue>> queue;
@@ -222,6 +223,26 @@ struct Swapchain
     vk::raii::CommandBuffers commandBuffers;
 };
 
+struct Shader
+{
+    using Stage = std::pair<const vk::ShaderStageFlagBits, const std::reference_wrapper<const std::vector<uint32_t>>>;
+    Shader(const Device& device, const std::vector<Stage>& stages, const vk::PushConstantRange& pushConstantRange) :
+        layout{ device, {{}, 0, {}, 1, &pushConstantRange } }
+    {
+        std::vector<vk::ShaderCreateInfoEXT> shaderCreateInfos{ stages.size(), { vk::ShaderCreateFlagBitsEXT::eLinkStage, {}, {}, vk::ShaderCodeTypeEXT::eSpirv, {}, {}, "main", {}, {}, 1, &pushConstantRange } };
+        for(uint32_t i = 0; i < stages.size(); ++i) {
+            shaderCreateInfos[i].setStage(stages[i].first);
+            if(i < (stages.size() - 1)) shaderCreateInfos[i].setNextStage(stages[i + 1].first);
+            shaderCreateInfos[i].setCode<uint32_t>(stages[i].second.get());
+		}
+        _shaders = device.device.createShadersEXT(shaderCreateInfos);
+        for(const auto& shader : _shaders) shaders.emplace_back(*shader); // needed in order to pass the vector directly to bindShadersEXT()
+	}
+    std::vector<vk::raii::ShaderEXT> _shaders;
+    std::vector<vk::ShaderEXT> shaders;
+    vk::raii::PipelineLayout layout;
+};
+
 // Not used
 std::string loadFile(const std::string_view path)
 {
@@ -240,12 +261,12 @@ int main(int /*argc*/, char* /*argv[]*/)
     const vk::raii::Context context{};
     constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion13 };
 
+    // Instance Setup
     std::vector<const char*> iExtensions;
     uint32_t glfwInstanceExtensionCount;
     const char** glfwInstanceExtensionNames = glfwGetRequiredInstanceExtensions(&glfwInstanceExtensionCount);
     iExtensions.reserve(static_cast<size_t>(glfwInstanceExtensionCount) + 1u);
     for (uint32_t i = 0; i < glfwInstanceExtensionCount; ++i) iExtensions.emplace_back(glfwInstanceExtensionNames[i]);
-
 #ifdef __APPLE__
     iExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 #endif
@@ -255,8 +276,7 @@ int main(int /*argc*/, char* /*argv[]*/)
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
 #endif
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
-
-    vk::InstanceCreateInfo instanceCreateInfo;
+    vk::InstanceCreateInfo instanceCreateInfo {};
     instanceCreateInfo.setPApplicationInfo(&applicationInfo);
     instanceCreateInfo.setPEnabledExtensionNames(iExtensions);
     instanceCreateInfo.setPEnabledLayerNames(iLayers);
@@ -265,6 +285,7 @@ int main(int /*argc*/, char* /*argv[]*/)
 #endif
     vk::raii::Instance instance(context, instanceCreateInfo);
 
+    // Surface Setup
     // unfortunately glfw surface creation does not work with the vulkan c++20 module
     vk::raii::SurfaceKHR surfaceKHR{ nullptr };
 #ifdef _WIN32
@@ -272,11 +293,10 @@ int main(int /*argc*/, char* /*argv[]*/)
     surfaceKHR = std::move(vk::raii::SurfaceKHR{ instance, win32SurfaceCreateInfoKHR });
 #endif
 
+    // Device setup
     vk::raii::PhysicalDevices physicalDevices{ instance };
     const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
-
-    // Device setup
-    // * find queue
+	// * find queue
     auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
@@ -306,33 +326,19 @@ int main(int /*argc*/, char* /*argv[]*/)
     std::memcpy(p, vertices.data(), verticesSize);
     buffer.memory.unmapMemory();
 
-    // setup shader objects
+    // Shader object setup
     // https://github.com/KhronosGroup/Vulkan-Docs/blob/main/proposals/VK_EXT_shader_object.adoc
     constexpr vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
+    Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, vertexShaderSPV }, { vk::ShaderStageFlagBits::eFragment, fragmentShaderSPV } }, pcRange };
 
-    vk::ShaderCreateInfoEXT shaderCreateInfoVertex = { vk::ShaderCreateFlagBitsEXT::eLinkStage, vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment };
-    shaderCreateInfoVertex.setPushConstantRanges({ pcRange });
-    shaderCreateInfoVertex.setCodeType(vk::ShaderCodeTypeEXT::eSpirv);
-    shaderCreateInfoVertex.setPName("main");
-    shaderCreateInfoVertex.setCode<uint32_t>(vertexShaderSPV);
-
-    vk::ShaderCreateInfoEXT shaderCreateInfoFragment = { vk::ShaderCreateFlagBitsEXT::eLinkStage, vk::ShaderStageFlagBits::eFragment, {} };
-    shaderCreateInfoFragment.setPushConstantRanges({ pcRange });
-    shaderCreateInfoFragment.setCodeType(vk::ShaderCodeTypeEXT::eSpirv);
-    shaderCreateInfoFragment.setPName("main");
-    shaderCreateInfoFragment.setCode<uint32_t>(fragmentShaderSPV);
-    const std::vector<vk::raii::ShaderEXT> shaders = device.device.createShadersEXT({ shaderCreateInfoVertex, shaderCreateInfoFragment });
-    const vk::raii::PipelineLayout layout{ device, {{}, 0, {}, 1, &pcRange} };
-
+    // Swapchain setup
     Swapchain swapchain{ device, surfaceKHR, queueFamilyIndex.value() };
-    constexpr vk::ImageSubresourceRange imageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
     vk::ImageMemoryBarrier2 imageMemoryBarrier{};
-    imageMemoryBarrier.setSubresourceRange(imageSubresourceRange);
+    imageMemoryBarrier.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
     vk::DependencyInfoKHR dependencyInfo{};
     dependencyInfo.setImageMemoryBarriers({ imageMemoryBarrier });
 
-    while (!glfwWindowShouldClose(window))
-    {
+    while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GLFW_TRUE);
         swapchain.acquireNextImage(device);
@@ -351,8 +357,8 @@ int main(int /*argc*/, char* /*argv[]*/)
 
         cmdBuffer.beginRendering({ {}, { {}, swapchain.extent }, 1, 0, 1, &rAttachmentInfo });
         {
-            cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, { *shaders[0], *shaders[1] });
-            cmdBuffer.pushConstants<uint64_t>(*layout, vk::ShaderStageFlagBits::eVertex, 0, { buffer.deviceAddress });
+            cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, shader.shaders);
+            cmdBuffer.pushConstants<uint64_t>(*shader.layout, vk::ShaderStageFlagBits::eVertex, 0, { buffer.deviceAddress });
             cmdBuffer.setPrimitiveTopologyEXT(vk::PrimitiveTopology::eTriangleList);
             cmdBuffer.setPolygonModeEXT(vk::PolygonMode::eFill);
             cmdBuffer.setFrontFaceEXT(vk::FrontFace::eCounterClockwise);
