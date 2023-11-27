@@ -1,8 +1,8 @@
-# The meme is dead
+## The meme is dead
 
 Render a vulkan triangle in ~390 lines of code! (~350 without the shader code) 
 
-## Highlights
+### Highlights
 * Vulkan hpp headers included as a c++ module
 * Dynamic rendering
 * Shader objects
@@ -10,7 +10,7 @@ Render a vulkan triangle in ~390 lines of code! (~350 without the shader code)
 * Resizable BAR for device local buffer access (needs to be activated in the bios)
 * Modular code
 
-## How to build (on windows)
+### How to build (on windows)
 Use CMake for project configuration. The included `make.bat` script can be used for this. The Vulkan SDK is not required to run this code. Only for validation layers a Vulkan SDK installation is necessary.
 
 > Please clone this repository with submodule!
