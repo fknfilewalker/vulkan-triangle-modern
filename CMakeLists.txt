@@ -14,14 +14,12 @@ set(VTM_EXTERNAL_DIR "${VTM_SOURCE_DIR}/external")
 #================================#
 # Dependencies                   #
 #================================#
-#find_package(Vulkan REQUIRED)
-# set up Vulkan C++ module
+# set up vulkan C++ module target
 add_library(VulkanCppModule)
-target_sources(VulkanCppModule PUBLIC
-    FILE_SET CXX_MODULES
-    FILES ${VTM_EXTERNAL_DIR}/vulkan-headers/include/vulkan/vulkan.cppm
+target_sources(VulkanCppModule PUBLIC FILE_SET CXX_MODULES
+    FILES "${VTM_EXTERNAL_DIR}/vulkan-headers/include/vulkan/vulkan.cppm"
 )
-target_include_directories(VulkanCppModule PUBLIC ${VTM_EXTERNAL_DIR}/vulkan-headers/include)
+target_include_directories(VulkanCppModule PUBLIC "${VTM_EXTERNAL_DIR}/vulkan-headers/include")
 target_compile_definitions(VulkanCppModule PUBLIC 
     VULKAN_HPP_NO_SMART_HANDLE
     VULKAN_HPP_NO_SPACESHIP_OPERATOR
