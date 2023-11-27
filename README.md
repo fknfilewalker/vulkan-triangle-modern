@@ -7,7 +7,7 @@ Render a vulkan triangle in ~390 lines of code! (~350 without the shader code)
 * Dynamic rendering
 * Shader objects
 * Bindless rendering using buffer references
-* Resizable BAR for device local buffer access (needs to be activated in the bios)
+* (Resizable) BAR for device local buffer access
 * Modular code
 
 ### How to build (on windows)
