@@ -17,6 +17,6 @@ layout(push_constant, scalar) uniform pushConstant
 };
 
 void main() {
-	Vertex vertex = Vertex(vertexPtr + sizeOfVec3 * gl_VertexIndex);
-	gl_Position = vec4(vertex.position.xy, 0.0, 1.0);
+    Vertex vertex = Vertex(vertexPtr + sizeOfVec3 * gl_VertexIndex);
+    gl_Position = vec4(vertex.position.xy, 0.0, 1.0);
 }
