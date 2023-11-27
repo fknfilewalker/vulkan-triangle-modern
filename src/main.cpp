@@ -220,7 +220,8 @@ struct Shader
     Shader(const Device& device, const std::vector<Stage>& stages, const vk::PushConstantRange& pushConstantRange) :
         layout{ device, {{}, 0, {}, 1, &pushConstantRange } }
     {
-        std::vector<vk::ShaderCreateInfoEXT> shaderCreateInfos{ stages.size(), { vk::ShaderCreateFlagBitsEXT::eLinkStage, {}, {}, vk::ShaderCodeTypeEXT::eSpirv, {}, {}, "main", {}, {}, 1, &pushConstantRange } };
+        std::vector<vk::ShaderCreateInfoEXT> shaderCreateInfos{ stages.size(), { stages.size() > 1u ? vk::ShaderCreateFlagBitsEXT::eLinkStage : vk::ShaderCreateFlagsEXT{},
+        	{}, {}, vk::ShaderCodeTypeEXT::eSpirv, {}, {}, "main", {}, {}, 1, &pushConstantRange } };
         for (size_t i = 0; i < stages.size(); ++i) {
             shaderCreateInfos[i].setStage(stages[i].first);
             if (i < (stages.size() - 1)) shaderCreateInfos[i].setNextStage(stages[i + 1u].first);
