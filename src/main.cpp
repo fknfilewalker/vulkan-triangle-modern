@@ -28,7 +28,7 @@ layout(buffer_reference, scalar) readonly buffer Vertex
 };
 layout(push_constant, scalar) uniform pushConstant
 {
-	uint64_t vertexPtr;
+	uint64_t vertexPtr; /* for bindless rendering */
 };
 
 void main() {
@@ -80,8 +80,10 @@ std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyPr
 
 struct Device
 {
+    using QueueFamily = uint16_t;
+    using QueueCount = uint16_t;
     Device(const vk::raii::PhysicalDevice& physicalDevice, const std::vector<const char*>& extensions,
-        const std::unordered_map<uint16_t, uint16_t>& queues, const void* pNext) : device{ nullptr }, physicalDevice{ physicalDevice },
+        const std::unordered_map<QueueFamily, QueueCount>& queues, const void* pNext) : device{ nullptr }, physicalDevice{ physicalDevice },
         memoryProperties{ physicalDevice.getMemoryProperties() }
     {
         constexpr float priority = 1.0f;
@@ -132,7 +134,7 @@ struct Buffer
         buffer.bindMemory(*memory, 0);
 
         const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo{ *buffer };
-        deviceAddress = device.device.getBufferAddress(bufferDeviceAddressInfo);
+        deviceAddress = device.device.getBufferAddress(bufferDeviceAddressInfo); /* for bindless rendering */
     }
     const vk::raii::Buffer buffer;
     vk::raii::DeviceMemory memory;
@@ -153,7 +155,7 @@ struct Swapchain
         vk::Image image;
         vk::raii::ImageView imageView;
         vk::raii::Fence inFlightFence;
-        vk::raii::Semaphore nextImageAvailableSemaphore;
+        vk::raii::Semaphore nextImageAvailableSemaphore; // refers to the image in the next frame
         vk::raii::Semaphore renderFinishedSemaphore;
         vk::raii::CommandBuffer& commandBuffer;
     };
@@ -168,22 +170,22 @@ struct Swapchain
         extent = surfaceCapabilities.currentExtent;
         const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ {}, *surface, imageCount,
             surfaceFormats[0].format, surfaceFormats[0].colorSpace, extent,
-            1u, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst };
+            1u, vk::ImageUsageFlagBits::eColorAttachment };
         swapchainKHR = std::move(vk::raii::SwapchainKHR{ device, swapchainCreateInfoKHR });
 
         commandBuffers = std::move(vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } });
-        std::vector<vk::Image> images = swapchainKHR.getImages();
+        const std::vector<vk::Image> images = swapchainKHR.getImages();
         frames.reserve(imageCount);
         for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(device, images[i], commandBuffers[i]);
     }
 
     void acquireNextImage(const vk::raii::Device& device) {
-        const auto nextImage = swapchainKHR.acquireNextImage(0, *frames[currentImageIdx].nextImageAvailableSemaphore);
+        const std::pair<vk::Result, uint32_t> nextImage = swapchainKHR.acquireNextImage(0, *getCurrentFrame().nextImageAvailableSemaphore);
         resultCheck(nextImage.first, "acquireing next swapchain image error");
         previousImageIdx = currentImageIdx;
         currentImageIdx = nextImage.second;
 
-        const Frame& frame = frames[currentImageIdx];
+        const Frame& frame = getCurrentFrame();
         while (vk::Result::eTimeout == device.waitForFences(*frame.inFlightFence, vk::True, UINT64_MAX)) {}
         device.resetFences(*frame.inFlightFence);
         frame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
@@ -271,26 +273,26 @@ int main(int /*argc*/, char* /*argv[]*/)
 #ifdef __APPLE__
     instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
 #endif
-    vk::raii::Instance instance(context, instanceCreateInfo);
+    const vk::raii::Instance instance(context, instanceCreateInfo);
 
     // Surface Setup
     // unfortunately glfw surface creation does not work with the vulkan c++20 module
     vk::raii::SurfaceKHR surfaceKHR{ nullptr };
 #ifdef _WIN32
-    vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
+    const vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
     surfaceKHR = std::move(vk::raii::SurfaceKHR{ instance, win32SurfaceCreateInfoKHR });
 #endif
 
     // Device setup
-    vk::raii::PhysicalDevices physicalDevices{ instance };
+    const vk::raii::PhysicalDevices physicalDevices{ instance };
     const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
     // * find queue
-    auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+    const auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surfaceKHR)) exitWithError("Queue family does not support presentation");
     // * check extensions
-    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
+    const std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
@@ -303,13 +305,13 @@ int main(int /*argc*/, char* /*argv[]*/)
     Device device{ physicalDevice, dExtensions, {{queueFamilyIndex.value(), 1}}, &physicalDeviceFeatures2 };
 
     // Vertex buffer setup (triangle is upside down on purpose)
-    std::vector vertices = {
+    const std::vector vertices = {
         -0.5f, -0.5f, 0.0f,
          0.5f, -0.5f, 0.0f,
          0.0f,  0.5f, 0.0f
     };
     const size_t verticesSize = vertices.size() * sizeof(float);
-    const Buffer buffer{ device, verticesSize, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible };
+    const Buffer buffer{ device, verticesSize, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible }; /* reBAR */
     void* p = buffer.memory.mapMemory(0, vk::WholeSize);
     std::memcpy(p, vertices.data(), verticesSize);
     buffer.memory.unmapMemory();
@@ -323,7 +325,7 @@ int main(int /*argc*/, char* /*argv[]*/)
     Swapchain swapchain{ device, surfaceKHR, queueFamilyIndex.value() };
     vk::ImageMemoryBarrier2 imageMemoryBarrier{};
     imageMemoryBarrier.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
-    vk::DependencyInfoKHR dependencyInfo{};
+    vk::DependencyInfo dependencyInfo{};
     dependencyInfo.setImageMemoryBarriers(imageMemoryBarrier);
 
     while (!glfwWindowShouldClose(window)) {
@@ -342,11 +344,11 @@ int main(int /*argc*/, char* /*argv[]*/)
         rAttachmentInfo.clearValue.color = { 0.0f, 0.0f, 0.0f, 1.0f };
         rAttachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
         rAttachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
-
         cmdBuffer.beginRendering({ {}, { {}, swapchain.extent }, 1, 0, 1, &rAttachmentInfo });
         {
+            /* set render state for shader objects */
             cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, shader.shaders);
-            cmdBuffer.pushConstants<uint64_t>(*shader.layout, vk::ShaderStageFlagBits::eVertex, 0, buffer.deviceAddress);
+            cmdBuffer.pushConstants<uint64_t>(*shader.layout, vk::ShaderStageFlagBits::eVertex, 0, /* for bindless rendering */ buffer.deviceAddress);
             cmdBuffer.setPrimitiveTopologyEXT(vk::PrimitiveTopology::eTriangleList);
             cmdBuffer.setPolygonModeEXT(vk::PolygonMode::eFill);
             cmdBuffer.setFrontFaceEXT(vk::FrontFace::eCounterClockwise);
