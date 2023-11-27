@@ -197,13 +197,7 @@ struct Swapchain
         curFrame.commandBuffer.end();
 
         constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        vk::SubmitInfo submitInfo{};
-        submitInfo.setWaitSemaphores(*getPreviousFrame().nextImageAvailableSemaphore);
-        submitInfo.setPWaitDstStageMask(&waitDstStageMask);
-        submitInfo.setSignalSemaphores(*curFrame.renderFinishedSemaphore);
-        submitInfo.setCommandBuffers(*curFrame.commandBuffer);
-        presentQueue.submit(submitInfo, *curFrame.inFlightFence);
-
+        presentQueue.submit(vk::SubmitInfo{ *getPreviousFrame().nextImageAvailableSemaphore , waitDstStageMask, *curFrame.commandBuffer ,*curFrame.renderFinishedSemaphore }, *curFrame.inFlightFence);
         resultCheck(presentQueue.presentKHR({ *curFrame.renderFinishedSemaphore,*swapchainKHR, currentImageIdx }), "present swapchain image error");
     }
 
