@@ -200,14 +200,14 @@ struct Swapchain
 
         constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         vk::SubmitInfo submitInfo{};
-        submitInfo.setWaitSemaphores({ *getPreviousFrame().nextImageAvailableSemaphore });
+        submitInfo.setWaitSemaphores(*getPreviousFrame().nextImageAvailableSemaphore);
         submitInfo.setPWaitDstStageMask(&waitDstStageMask);
-        submitInfo.setSignalSemaphores({ *curFrame.renderFinishedSemaphore });
-        submitInfo.setCommandBuffers({ *curFrame.commandBuffer });
+        submitInfo.setSignalSemaphores(*curFrame.renderFinishedSemaphore);
+        submitInfo.setCommandBuffers(*curFrame.commandBuffer);
         presentQueue.submit({ submitInfo }, *curFrame.inFlightFence);
 
-        vk::PresentInfoKHR presentInfoKHR{ { *curFrame.renderFinishedSemaphore } };
-        presentInfoKHR.setSwapchains({ *swapchainKHR });
+        vk::PresentInfoKHR presentInfoKHR{ *curFrame.renderFinishedSemaphore };
+        presentInfoKHR.setSwapchains(*swapchainKHR);
         presentInfoKHR.setPImageIndices(&currentImageIdx);
 
         resultCheck(presentQueue.presentKHR(presentInfoKHR), "present swapchain image error");
@@ -230,14 +230,14 @@ struct Shader
         layout{ device, {{}, 0, {}, 1, &pushConstantRange } }
     {
         std::vector<vk::ShaderCreateInfoEXT> shaderCreateInfos{ stages.size(), { vk::ShaderCreateFlagBitsEXT::eLinkStage, {}, {}, vk::ShaderCodeTypeEXT::eSpirv, {}, {}, "main", {}, {}, 1, &pushConstantRange } };
-        for(uint32_t i = 0; i < stages.size(); ++i) {
+        for (size_t i = 0; i < stages.size(); ++i) {
             shaderCreateInfos[i].setStage(stages[i].first);
-            if(i < (stages.size() - 1)) shaderCreateInfos[i].setNextStage(stages[i + 1].first);
+            if (i < (stages.size() - 1)) shaderCreateInfos[i].setNextStage(stages[i + 1u].first);
             shaderCreateInfos[i].setCode<uint32_t>(stages[i].second.get());
-		}
+        }
         _shaders = device.device.createShadersEXT(shaderCreateInfos);
-        for(const auto& shader : _shaders) shaders.emplace_back(*shader); // needed in order to pass the vector directly to bindShadersEXT()
-	}
+        for (const auto& shader : _shaders) shaders.emplace_back(*shader); // needed in order to pass the vector directly to bindShadersEXT()
+    }
     std::vector<vk::raii::ShaderEXT> _shaders;
     std::vector<vk::ShaderEXT> shaders;
     vk::raii::PipelineLayout layout;
@@ -276,7 +276,7 @@ int main(int /*argc*/, char* /*argv[]*/)
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
 #endif
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
-    vk::InstanceCreateInfo instanceCreateInfo {};
+    vk::InstanceCreateInfo instanceCreateInfo{};
     instanceCreateInfo.setPApplicationInfo(&applicationInfo);
     instanceCreateInfo.setPEnabledExtensionNames(iExtensions);
     instanceCreateInfo.setPEnabledLayerNames(iLayers);
@@ -296,7 +296,7 @@ int main(int /*argc*/, char* /*argv[]*/)
     // Device setup
     vk::raii::PhysicalDevices physicalDevices{ instance };
     const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
-	// * find queue
+    // * find queue
     auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
@@ -336,7 +336,7 @@ int main(int /*argc*/, char* /*argv[]*/)
     vk::ImageMemoryBarrier2 imageMemoryBarrier{};
     imageMemoryBarrier.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
     vk::DependencyInfoKHR dependencyInfo{};
-    dependencyInfo.setImageMemoryBarriers({ imageMemoryBarrier });
+    dependencyInfo.setImageMemoryBarriers(imageMemoryBarrier);
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();

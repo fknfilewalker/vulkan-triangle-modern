@@ -22,12 +22,18 @@ target_sources(VulkanCppModule PUBLIC
     FILES ${VTM_EXTERNAL_DIR}/vulkan-headers/include/vulkan/vulkan.cppm
 )
 target_include_directories(VulkanCppModule PUBLIC ${VTM_EXTERNAL_DIR}/vulkan-headers/include)
-target_compile_definitions(VulkanCppModule PUBLIC VULKAN_HPP_NO_SMART_HANDLE)
-target_compile_definitions(VulkanCppModule PUBLIC VK_NO_PROTOTYPES)
+target_compile_definitions(VulkanCppModule PUBLIC 
+    VULKAN_HPP_NO_SMART_HANDLE
+    VULKAN_HPP_NO_SPACESHIP_OPERATOR
+    VULKAN_HPP_NO_TO_STRING
+    VK_NO_PROTOTYPES
+)
 if(WIN32)
-    target_compile_definitions(VulkanCppModule PUBLIC NOMINMAX)
-    target_compile_definitions(VulkanCppModule PUBLIC VK_USE_PLATFORM_WIN32_KHR)
-    target_compile_definitions(VulkanCppModule PUBLIC GLFW_EXPOSE_NATIVE_WIN32)
+    target_compile_definitions(VulkanCppModule PUBLIC 
+        VK_USE_PLATFORM_WIN32_KHR 
+        GLFW_EXPOSE_NATIVE_WIN32 
+        NOMINMAX
+    )
 elseif(APPLE)
 elseif(UNIX)
 endif()
