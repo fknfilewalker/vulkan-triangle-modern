@@ -8,11 +8,11 @@ if "%~1"=="clean" goto CLEAN
 @ECHO ON
 
 :BLANK
-cmake -H. -B %PROJECT_DIR% -A "x64"
+cmake -H. -B %PROJECT_DIR% -A "x64" -DCMAKE_INSTALL_PREFIX=%INSTALL_DIR%
 GOTO DONE
 
 :INSTALL
-cmake -H. -B %PROJECT_DIR% -A "x64"
+cmake -H. -B %PROJECT_DIR% -A "x64" -DCMAKE_INSTALL_PREFIX=%INSTALL_DIR%
 cmake --build %PROJECT_DIR% --parallel 24 --config Debug --target install
 cmake --build %PROJECT_DIR% --parallel 24 --config Release --target install
 GOTO DONE
