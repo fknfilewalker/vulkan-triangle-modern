@@ -120,10 +120,13 @@ struct Device
     const vk::PhysicalDeviceMemoryProperties memoryProperties;
 };
 
-struct Buffer
+// Every resource has a device reference
+struct Resource { const Device& device; };
+
+struct Buffer : Resource
 {
     Buffer(const Device& device, const vk::DeviceSize size, const vk::BufferUsageFlags usageFlags, const vk::MemoryPropertyFlags memoryPropertyFlags)
-        : buffer{ device, { {}, size, usageFlags | vk::BufferUsageFlagBits::eShaderDeviceAddress } }, memory{ nullptr }
+        : Resource{ device }, buffer{ device, { {}, size, usageFlags | vk::BufferUsageFlagBits::eShaderDeviceAddress } }, memory{ nullptr }
     {
         const auto memoryRequirements = buffer.getMemoryRequirements();
         const auto memoryTypeIndex = device.findMemoryTypeIndex(memoryRequirements, memoryPropertyFlags);
@@ -141,7 +144,7 @@ struct Buffer
     vk::DeviceAddress deviceAddress;
 };
 
-struct Swapchain
+struct Swapchain : Resource
 {
     // Data for one frame/image in our swapchain
     struct Frame {
@@ -155,13 +158,12 @@ struct Swapchain
         vk::Image image;
         vk::raii::ImageView imageView;
         vk::raii::Fence inFlightFence;
-        vk::raii::Semaphore nextImageAvailableSemaphore; // refers to the image in the next frame
-        vk::raii::Semaphore renderFinishedSemaphore;
+        vk::raii::Semaphore nextImageAvailableSemaphore /* refers to the next frame */, renderFinishedSemaphore /* refers to current frame */;
         vk::raii::CommandBuffer& commandBuffer;
     };
 
-    Swapchain(const Device& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : currentImageIdx{ 0 }, previousImageIdx{ 0 }, swapchainKHR{ nullptr },
-        commandPool{ device, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }, commandBuffers{ nullptr }
+    Swapchain(const Device& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : Resource{ device }, currentImageIdx{ 0 }, previousImageIdx{ 0 },
+		swapchainKHR{ nullptr }, commandPool{ device, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }, commandBuffers{ nullptr }
     {
         const auto surfaceCapabilities = device.physicalDevice.getSurfaceCapabilitiesKHR(*surface);
         const auto surfaceFormats = device.physicalDevice.getSurfaceFormatsKHR(*surface);
@@ -204,20 +206,18 @@ struct Swapchain
     const Frame& getCurrentFrame() { return frames[currentImageIdx]; }
     const Frame& getPreviousFrame() { return frames[previousImageIdx]; }
 
-    uint32_t imageCount;
     vk::Extent2D extent;
-    uint32_t currentImageIdx;
-    uint32_t previousImageIdx;
+    uint32_t imageCount, currentImageIdx, previousImageIdx;
     std::vector<Frame> frames;
     vk::raii::SwapchainKHR swapchainKHR;
     const vk::raii::CommandPool commandPool;
     vk::raii::CommandBuffers commandBuffers;
 };
 
-struct Shader
+struct Shader : Resource
 {
     using Stage = std::pair<const vk::ShaderStageFlagBits, const std::reference_wrapper<const std::vector<uint32_t>>>;
-    Shader(const Device& device, const std::vector<Stage>& stages, const vk::PushConstantRange& pushConstantRange) :
+    Shader(const Device& device, const std::vector<Stage>& stages, const vk::PushConstantRange& pushConstantRange) : Resource{ device },
         layout{ device, {{}, 0, {}, 1, &pushConstantRange } }
     {
         std::vector<vk::ShaderCreateInfoEXT> shaderCreateInfos{ stages.size(), { stages.size() > 1u ? vk::ShaderCreateFlagBitsEXT::eLinkStage : vk::ShaderCreateFlagsEXT{},
