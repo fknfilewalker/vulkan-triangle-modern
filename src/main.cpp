@@ -235,7 +235,7 @@ struct Shader : Resource
     vk::raii::PipelineLayout layout;
 };
 
-int main(int /*argc*/, char* /*argv[]*/)
+int main(int /*argc*/, char** /*argv*/)
 {
     if (!glfwInit()) exitWithError("Failed to init GLFW");
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // No need to create a graphics context for Vulkan
