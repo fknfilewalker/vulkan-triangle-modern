@@ -1,9 +1,9 @@
 ## The meme is dead
 
-Render a vulkan triangle in ~390 lines of code! (~350 without the shader code) 
+Render a vulkan triangle in ~390 lines of [code](https://github.com/fknfilewalker/vulkan-triangle-modern/blob/main/src/main.cpp)! (~350 without the shader code) 
 
 ### Highlights
-* Vulkan hpp headers included as a c++ module
+* Vulkan hpp headers included as a c++ module (c++20 required)
 * Dynamic rendering
 * Shader objects
 * Bindless rendering using buffer references
