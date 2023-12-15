@@ -12,14 +12,13 @@ constexpr bool isApple = false;
 #include <algorithm>
 #include <bitset>
 #include <vector>
-#include <iostream>
 #include <unordered_map>
+#include <memory>
 
 constexpr bool fullscreen = false;
 constexpr uint32_t window_width = 800;
 constexpr uint32_t window_height = 600;
-
-constexpr std::string_view vertexShader = R"(
+[[maybe_unused]] constexpr std::string_view vertexShader = R"(
 #version 450
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_scalar_block_layout : require
@@ -42,8 +41,7 @@ void main() {
 	Vertex vertex = Vertex(vertexPtr + sizeOfVec3 * gl_VertexIndex);
 	gl_Position = vec4(vertex.position.xy, 0.0, 1.0);
 })";
-
-constexpr std::string_view fragmentShader = R"(
+[[maybe_unused]] constexpr std::string_view fragmentShader = R"(
 #version 450
 layout (location = 0) out vec4 fragColor;
 void main() {
@@ -54,7 +52,7 @@ void main() {
 
 [[noreturn]] void exitWithError(const std::string_view error) {
 	std::println("{}", error.data());
-    exit(EXIT_FAILURE);
+    std::quick_exit(EXIT_FAILURE);
 }
 
 template<typename T>
@@ -89,9 +87,9 @@ struct Device
 {
     using QueueFamily = uint16_t;
     using QueueCount = uint16_t;
-    Device(const vk::raii::PhysicalDevice& physicalDevice, const std::vector<const char*>& extensions,
-        const std::unordered_map<QueueFamily, QueueCount>& queues, const void* pNext) : device{ nullptr }, physicalDevice{ physicalDevice },
-        memoryProperties{ physicalDevice.getMemoryProperties() }
+    using Queues = std::unordered_map<QueueFamily, QueueCount>;
+    Device(const vk::raii::PhysicalDevice& physicalDevice, const std::vector<const char*>& extensions, const Queues& queues, const void* pNext) :
+		device{ nullptr }, physicalDevice{ physicalDevice }, memoryProperties{ physicalDevice.getMemoryProperties() }
     {
         constexpr float priority = 1.0f;
         std::vector<vk::DeviceQueueCreateInfo> deviceQueueCreateInfos;
@@ -128,23 +126,23 @@ struct Device
 };
 
 // Every resource has a device reference
-struct Resource { const Device& dev; };
+struct Resource { std::shared_ptr<Device> dev; };
 
 struct Buffer : Resource
 {
-    Buffer(const Device& device, const vk::DeviceSize size, const vk::BufferUsageFlags usageFlags, const vk::MemoryPropertyFlags memoryPropertyFlags)
-        : Resource{ device }, buffer{ device, { {}, size, usageFlags | vk::BufferUsageFlagBits::eShaderDeviceAddress } }, memory{ nullptr }
+    Buffer(const std::shared_ptr<Device>& device, const vk::DeviceSize size, const vk::BufferUsageFlags usageFlags, const vk::MemoryPropertyFlags memoryPropertyFlags)
+        : Resource{ device }, buffer{ *dev, { {}, size, usageFlags | vk::BufferUsageFlagBits::eShaderDeviceAddress } }, memory{ nullptr }
     {
         const auto memoryRequirements = buffer.getMemoryRequirements();
-        const auto memoryTypeIndex = device.findMemoryTypeIndex(memoryRequirements, memoryPropertyFlags);
+        const auto memoryTypeIndex = dev->findMemoryTypeIndex(memoryRequirements, memoryPropertyFlags);
         if (!memoryTypeIndex.has_value()) exitWithError("No memory type index found");
         constexpr vk::MemoryAllocateFlagsInfo memoryAllocateFlagsInfo{ vk::MemoryAllocateFlagBits::eDeviceAddress };
         const vk::MemoryAllocateInfo memoryAllocateInfo{ memoryRequirements.size, memoryTypeIndex.value(), &memoryAllocateFlagsInfo };
-        memory = vk::raii::DeviceMemory{ device, memoryAllocateInfo };
+        memory = vk::raii::DeviceMemory{ *dev, memoryAllocateInfo };
         buffer.bindMemory(*memory, 0);
 
         const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo{ *buffer };
-        deviceAddress = device.device.getBufferAddress(bufferDeviceAddressInfo); /* for bindless rendering */
+        deviceAddress = dev->device.getBufferAddress(bufferDeviceAddressInfo); /* for bindless rendering */
     }
     const vk::raii::Buffer buffer;
     vk::raii::DeviceMemory memory;
@@ -169,23 +167,23 @@ struct Swapchain : Resource
         const vk::raii::CommandBuffer& commandBuffer;
     };
 
-    Swapchain(const Device& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : Resource{ device }, currentImageIdx{ 0 }, previousImageIdx{ 0 },
-		swapchainKHR{ nullptr }, commandPool{ device, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }, commandBuffers{ nullptr }
+    Swapchain(const std::shared_ptr<Device>& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : Resource{ device }, currentImageIdx{ 0 }, previousImageIdx{ 0 },
+		swapchainKHR{ nullptr }, commandPool{ *dev, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }, commandBuffers{ nullptr }
     {
-        const auto surfaceCapabilities = device.physicalDevice.getSurfaceCapabilitiesKHR(*surface);
-        const auto surfaceFormats = device.physicalDevice.getSurfaceFormatsKHR(*surface);
+        const auto surfaceCapabilities = dev->physicalDevice.getSurfaceCapabilitiesKHR(*surface);
+        const auto surfaceFormats = dev->physicalDevice.getSurfaceFormatsKHR(*surface);
 
         imageCount = std::min(3u, surfaceCapabilities.maxImageCount);
         extent = surfaceCapabilities.currentExtent;
         const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ {}, *surface, imageCount,
             surfaceFormats[0].format, surfaceFormats[0].colorSpace, extent,
             1u, vk::ImageUsageFlagBits::eColorAttachment };
-        swapchainKHR = vk::raii::SwapchainKHR{ device, swapchainCreateInfoKHR };
+        swapchainKHR = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfoKHR };
 
-        commandBuffers = vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } };
+        commandBuffers = vk::raii::CommandBuffers{ *dev, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } };
         const std::vector<vk::Image> images = swapchainKHR.getImages();
         frames.reserve(imageCount);
-        for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(device, images[i], commandBuffers[i]);
+        for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(*dev, images[i], commandBuffers[i]);
     }
 
     void acquireNextImage(const vk::raii::Device& device) {
@@ -224,8 +222,8 @@ struct Swapchain : Resource
 struct Shader : Resource
 {
     using Stage = std::pair<const vk::ShaderStageFlagBits, const std::reference_wrapper<const std::vector<uint32_t>>>;
-    Shader(const Device& device, const std::vector<Stage>& stages, const vk::PushConstantRange& pushConstantRange) : Resource{ device },
-        layout{ device, {{}, 0, {}, 1, &pushConstantRange } }
+    Shader(const std::shared_ptr<Device>& device, const std::vector<Stage>& stages, const vk::PushConstantRange& pushConstantRange) : Resource{ device },
+        layout{ *dev, {{}, 0, {}, 1, &pushConstantRange } }
     {
         std::vector<vk::ShaderCreateInfoEXT> shaderCreateInfos{ stages.size(), { stages.size() > 1u ? vk::ShaderCreateFlagBitsEXT::eLinkStage : vk::ShaderCreateFlagsEXT{},
         	{}, {}, vk::ShaderCodeTypeEXT::eSpirv, {}, {}, "main", {}, {}, 1, &pushConstantRange } };
@@ -234,7 +232,7 @@ struct Shader : Resource
             if (i < (stages.size() - 1)) shaderCreateInfos[i].setNextStage(stages[i + 1u].first);
             shaderCreateInfos[i].setCode<uint32_t>(stages[i].second.get());
         }
-        _shaders = device.device.createShadersEXT(shaderCreateInfos);
+        _shaders = dev->device.createShadersEXT(shaderCreateInfos);
         for (const auto& shader : _shaders) shaders.emplace_back(*shader); // needed in order to pass the vector directly to bindShadersEXT()
     }
     std::vector<vk::raii::ShaderEXT> _shaders;
@@ -310,7 +308,7 @@ int main(int /*argc*/, char** /*argv*/)
     vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2{ {}, &dynamicRenderingFeatures };
     physicalDeviceFeatures2.features.shaderInt64 = true;
     // * create device
-    Device device{ physicalDevice, dExtensions, {{queueFamilyIndex.value(), 1}}, &physicalDeviceFeatures2 };
+    auto device = std::make_shared<Device>(physicalDevice, dExtensions, Device::Queues{{queueFamilyIndex.value(), 1}}, &physicalDeviceFeatures2);
 
     // Vertex buffer setup (triangle is upside down on purpose)
     const std::vector vertices = {
@@ -338,7 +336,7 @@ int main(int /*argc*/, char** /*argv*/)
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GLFW_TRUE);
-        swapchain.acquireNextImage(device);
+        swapchain.acquireNextImage(*device);
         const auto& cFrame = swapchain.getCurrentFrame();
         const auto& cmdBuffer = cFrame.commandBuffer;
 
@@ -381,9 +379,9 @@ int main(int /*argc*/, char** /*argv*/)
         imageMemoryBarrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
         imageMemoryBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
         cmdBuffer.pipelineBarrier2(dependencyInfo);
-        swapchain.submitImage(device.queue[queueFamilyIndex.value()][0]);
+        swapchain.submitImage(device->queue[queueFamilyIndex.value()][0]);
     }
-    device.device.waitIdle();
+    device->device.waitIdle();
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
