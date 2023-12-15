@@ -283,13 +283,11 @@ int main(int /*argc*/, char** /*argv*/)
 #ifdef _WIN32
     const vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
     surfaceKHR = std::move(vk::raii::SurfaceKHR{ instance, win32SurfaceCreateInfoKHR });
-#endif
-    if constexpr (isApple) {
-        VkSurfaceKHR _surface;
+#elif __APPLE__
+        vk::SurfaceKHR _surface;
         glfwCreateWindowSurface(*instance, window, nullptr, &_surface);
         surfaceKHR = vk::raii::SurfaceKHR{ instance, _surface };
-    }
-    //vk::raii::SurfaceKHR surfaceKHR2 = std::move(surface);
+#endif
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
     const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
