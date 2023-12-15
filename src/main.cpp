@@ -8,7 +8,6 @@ constexpr bool isApple = false;
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
-#include <print>
 #include <algorithm>
 #include <bitset>
 #include <vector>
@@ -51,8 +50,8 @@ void main() {
 #include "shaders.h"
 
 [[noreturn]] void exitWithError(const std::string_view error) {
-	std::println("{}", error.data());
-    std::quick_exit(EXIT_FAILURE);
+    std::printf("%s\n", error.data());
+    exit(EXIT_FAILURE);
 }
 
 template<typename T>
