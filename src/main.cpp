@@ -144,7 +144,7 @@ struct Buffer : Resource
         const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo{ *buffer };
         deviceAddress = dev->device.getBufferAddress(bufferDeviceAddressInfo); /* for bindless rendering */
     }
-    const vk::raii::Buffer buffer;
+    vk::raii::Buffer buffer;
     vk::raii::DeviceMemory memory;
     vk::DeviceAddress deviceAddress;
 };
