@@ -8,6 +8,7 @@ constexpr bool isApple = false;
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
+#include <print>
 #include <algorithm>
 #include <bitset>
 #include <vector>
@@ -51,8 +52,8 @@ void main() {
 
 #include "shaders.h"
 
-void exitWithError(const std::string_view error) {
-    std::printf("%s\n", error.data());
+[[noreturn]] void exitWithError(const std::string_view error) {
+	std::println("{}", error.data());
     exit(EXIT_FAILURE);
 }
 
@@ -99,7 +100,7 @@ struct Device
             deviceQueueCreateInfos.emplace_back(vk::DeviceQueueCreateInfo{ {}, queueFamilyIndex, queueCount, &priority });
         }
         const vk::DeviceCreateInfo deviceCreateInfo{ {}, deviceQueueCreateInfos, {}, extensions,{}, pNext };
-        device = std::move(vk::raii::Device{ physicalDevice, deviceCreateInfo });
+        device = vk::raii::Device{ physicalDevice, deviceCreateInfo };
         // get queues
         for (const auto& [queueFamilyIndex, queueCount] : queues) {
             std::vector<vk::raii::Queue> queueFamily;
@@ -122,12 +123,12 @@ struct Device
 
     vk::raii::Device device;
     std::vector<std::vector<vk::raii::Queue>> queue;
-    const vk::raii::PhysicalDevice physicalDevice;
-    const vk::PhysicalDeviceMemoryProperties memoryProperties;
+    vk::raii::PhysicalDevice physicalDevice;
+	vk::PhysicalDeviceMemoryProperties memoryProperties;
 };
 
 // Every resource has a device reference
-struct Resource { const Device& device; };
+struct Resource { const Device& dev; };
 
 struct Buffer : Resource
 {
@@ -139,7 +140,7 @@ struct Buffer : Resource
         if (!memoryTypeIndex.has_value()) exitWithError("No memory type index found");
         constexpr vk::MemoryAllocateFlagsInfo memoryAllocateFlagsInfo{ vk::MemoryAllocateFlagBits::eDeviceAddress };
         const vk::MemoryAllocateInfo memoryAllocateInfo{ memoryRequirements.size, memoryTypeIndex.value(), &memoryAllocateFlagsInfo };
-        memory = std::move(vk::raii::DeviceMemory{ device, memoryAllocateInfo });
+        memory = vk::raii::DeviceMemory{ device, memoryAllocateInfo };
         buffer.bindMemory(*memory, 0);
 
         const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo{ *buffer };
@@ -158,14 +159,14 @@ struct Swapchain : Resource
             image{ image }, imageView{ nullptr }, inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } },
             nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} }, renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} }, commandBuffer{ commandBuffer }
         {
-            imageView = std::move(vk::raii::ImageView{ device, vk::ImageViewCreateInfo{ {}, image, vk::ImageViewType::e2D, vk::Format::eB8G8R8A8Unorm,
-                {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } });
+            imageView = vk::raii::ImageView{ device, vk::ImageViewCreateInfo{ {}, image, vk::ImageViewType::e2D, vk::Format::eB8G8R8A8Unorm,
+                {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
         }
         vk::Image image;
         vk::raii::ImageView imageView;
         vk::raii::Fence inFlightFence;
         vk::raii::Semaphore nextImageAvailableSemaphore /* refers to the next frame */, renderFinishedSemaphore /* refers to current frame */;
-        vk::raii::CommandBuffer& commandBuffer;
+        const vk::raii::CommandBuffer& commandBuffer;
     };
 
     Swapchain(const Device& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : Resource{ device }, currentImageIdx{ 0 }, previousImageIdx{ 0 },
@@ -179,9 +180,9 @@ struct Swapchain : Resource
         const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ {}, *surface, imageCount,
             surfaceFormats[0].format, surfaceFormats[0].colorSpace, extent,
             1u, vk::ImageUsageFlagBits::eColorAttachment };
-        swapchainKHR = std::move(vk::raii::SwapchainKHR{ device, swapchainCreateInfoKHR });
+        swapchainKHR = vk::raii::SwapchainKHR{ device, swapchainCreateInfoKHR };
 
-        commandBuffers = std::move(vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } });
+        commandBuffers = vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } };
         const std::vector<vk::Image> images = swapchainKHR.getImages();
         frames.reserve(imageCount);
         for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(device, images[i], commandBuffers[i]);
@@ -189,7 +190,7 @@ struct Swapchain : Resource
 
     void acquireNextImage(const vk::raii::Device& device) {
         const std::pair<vk::Result, uint32_t> nextImage = swapchainKHR.acquireNextImage(0, *getCurrentFrame().nextImageAvailableSemaphore);
-        resultCheck(nextImage.first, "acquireing next swapchain image error");
+        resultCheck(nextImage.first, "acquiring next swapchain image error");
         previousImageIdx = currentImageIdx;
         currentImageIdx = nextImage.second;
 
@@ -282,7 +283,7 @@ int main(int /*argc*/, char** /*argv*/)
     vk::raii::SurfaceKHR surfaceKHR{ nullptr };
 #ifdef _WIN32
     const vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
-    surfaceKHR = std::move(vk::raii::SurfaceKHR{ instance, win32SurfaceCreateInfoKHR });
+    surfaceKHR = vk::raii::SurfaceKHR{ instance, win32SurfaceCreateInfoKHR };
 #elif __APPLE__
     VkSurfaceKHR _surface;
     glfwCreateWindowSurface(*instance, window, nullptr, &_surface);
@@ -290,7 +291,7 @@ int main(int /*argc*/, char** /*argv*/)
 #endif
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
-    const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
+    const vk::raii::PhysicalDevice& physicalDevice{ physicalDevices[0] };
     // * find queue
     const auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
@@ -330,10 +331,9 @@ int main(int /*argc*/, char** /*argv*/)
 
     // Swapchain setup
     Swapchain swapchain{ device, surfaceKHR, queueFamilyIndex.value() };
-    vk::ImageMemoryBarrier2 imageMemoryBarrier{};
+    vk::ImageMemoryBarrier2 imageMemoryBarrier {};
     imageMemoryBarrier.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
-    vk::DependencyInfo dependencyInfo{};
-    dependencyInfo.setImageMemoryBarriers(imageMemoryBarrier);
+    vk::DependencyInfo dependencyInfo = vk::DependencyInfo{}.setImageMemoryBarriers(imageMemoryBarrier);
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
