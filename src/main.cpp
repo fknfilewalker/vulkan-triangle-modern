@@ -1,3 +1,9 @@
+#ifdef __APPLE__
+constexpr bool isApple = true;
+#else
+constexpr bool isApple = false;
+#endif
+
 import vulkan_hpp;
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
@@ -252,22 +258,22 @@ int main(int /*argc*/, char** /*argv*/)
     const char** glfwInstanceExtensionNames = glfwGetRequiredInstanceExtensions(&glfwInstanceExtensionCount);
     iExtensions.reserve(static_cast<size_t>(glfwInstanceExtensionCount) + 1u);
     for (uint32_t i = 0; i < glfwInstanceExtensionCount; ++i) iExtensions.emplace_back(glfwInstanceExtensionNames[i]);
-#ifdef __APPLE__
-    iExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-#endif
-    std::vector<const char*> iLayers;
+    if constexpr (isApple) iExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
+    
+	std::vector<const char*> iLayers;
 #if !defined( NDEBUG )
     iLayers.emplace_back("VK_LAYER_KHRONOS_validation");
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
 #endif
+    if constexpr (isApple) iLayers.emplace_back("VK_LAYER_KHRONOS_shader_object");
+
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
     vk::InstanceCreateInfo instanceCreateInfo{};
     instanceCreateInfo.setPApplicationInfo(&applicationInfo);
     instanceCreateInfo.setPEnabledExtensionNames(iExtensions);
     instanceCreateInfo.setPEnabledLayerNames(iLayers);
-#ifdef __APPLE__
-    instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
-#endif
+	if constexpr (isApple) instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
+
     const vk::raii::Instance instance(context, instanceCreateInfo);
 
     // Surface Setup
@@ -287,10 +293,9 @@ int main(int /*argc*/, char** /*argv*/)
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surfaceKHR)) exitWithError("Queue family does not support presentation");
     // * check extensions
-    const std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
-#ifdef __APPLE__
-    dExtensions.emplace_back("VK_KHR_portability_subset");
-#endif
+    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
+    if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
+
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
