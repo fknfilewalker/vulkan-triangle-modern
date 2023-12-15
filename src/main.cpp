@@ -250,7 +250,7 @@ int main(int /*argc*/, char** /*argv*/)
     GLFWwindow* window = glfwCreateWindow(window_width, window_height, "Vulkan Triangle Modern", monitor, nullptr);
 
     const vk::raii::Context context{};
-    constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion13 };
+    constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion12 };
 
     // Instance Setup
     std::vector<const char*> iExtensions;
@@ -284,9 +284,9 @@ int main(int /*argc*/, char** /*argv*/)
     const vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
     surfaceKHR = std::move(vk::raii::SurfaceKHR{ instance, win32SurfaceCreateInfoKHR });
 #elif __APPLE__
-        vk::SurfaceKHR _surface;
-        glfwCreateWindowSurface(*instance, window, nullptr, &_surface);
-        surfaceKHR = vk::raii::SurfaceKHR{ instance, _surface };
+    VkSurfaceKHR _surface;
+    glfwCreateWindowSurface(*instance, window, nullptr, &_surface);
+    surfaceKHR = vk::raii::SurfaceKHR{ instance, _surface };
 #endif
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
@@ -297,7 +297,7 @@ int main(int /*argc*/, char** /*argv*/)
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surfaceKHR)) exitWithError("Queue family does not support presentation");
     // * check extensions
-    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::KHRDynamicRenderingExtensionName, vk::EXTShaderObjectExtensionName };
+    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::KHRDynamicRenderingExtensionName, vk::KHRSynchronization2ExtensionName };
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
 
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
