@@ -8,6 +8,7 @@ constexpr bool isApple = false;
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
+#include <optional>
 #include <algorithm>
 #include <bitset>
 #include <vector>
