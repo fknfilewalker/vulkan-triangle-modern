@@ -19,7 +19,6 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 if(APPLE)
     # for moltenvk
     find_package(Vulkan REQUIRED)
-    target_link_libraries(${LIB_RVK} PUBLIC Vulkan::Vulkan)
 else()
     # set up vulkan C++ module target
     add_library(VulkanCppModule)
@@ -62,6 +61,7 @@ add_dependencies(${PROJECT_NAME} glfw)
 
 if(APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
+    target_include_directories(${PROJECT_NAME} PRIVATE "${VTM_EXTERNAL_DIR}/vulkan-headers/include")
 else()
     target_link_libraries(${PROJECT_NAME} PRIVATE VulkanCppModule)
     add_dependencies(${PROJECT_NAME} VulkanCppModule)

@@ -1,10 +1,10 @@
 #ifdef __APPLE__
+#include <vulkan/vulkan_raii.hpp>
 constexpr bool isApple = true;
 #else
+import vulkan_hpp;
 constexpr bool isApple = false;
 #endif
-
-import vulkan_hpp;
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
@@ -266,6 +266,7 @@ int main(int /*argc*/, char** /*argv*/)
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
 #endif
     if constexpr (isApple) iLayers.emplace_back("VK_LAYER_KHRONOS_shader_object");
+    if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) exitWithError("Instance layers not available");
 
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
     vk::InstanceCreateInfo instanceCreateInfo{};
@@ -283,7 +284,12 @@ int main(int /*argc*/, char** /*argv*/)
     const vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
     surfaceKHR = std::move(vk::raii::SurfaceKHR{ instance, win32SurfaceCreateInfoKHR });
 #endif
-
+    if constexpr (isApple) {
+        VkSurfaceKHR _surface;
+        glfwCreateWindowSurface(*instance, window, nullptr, &_surface);
+        surfaceKHR = vk::raii::SurfaceKHR{ instance, _surface };
+    }
+    //vk::raii::SurfaceKHR surfaceKHR2 = std::move(surface);
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
     const vk::raii::PhysicalDevice physicalDevice{ std::move(physicalDevices[0]) };
@@ -293,7 +299,7 @@ int main(int /*argc*/, char** /*argv*/)
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surfaceKHR)) exitWithError("Queue family does not support presentation");
     // * check extensions
-    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
+    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::KHRDynamicRenderingExtensionName, vk::EXTShaderObjectExtensionName };
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
 
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
