@@ -153,9 +153,9 @@ struct Swapchain : Resource
 {
     // Data for one frame/image in our swapchain
     struct Frame {
-        Frame(const vk::raii::Device& device, const vk::Image& image, vk::raii::CommandBuffer& commandBuffer) :
-            image{ image }, imageView{ nullptr }, inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } },
-            nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} }, renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} }, commandBuffer{ commandBuffer }
+        Frame(const vk::raii::Device& device, const vk::Image& image, vk::raii::CommandBuffer& commandBuffer) : image{ image }, imageView{ nullptr }, 
+            inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } }, nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} }, 
+            renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} }, commandBuffer{ std::move(commandBuffer) }
         {
             imageView = vk::raii::ImageView{ device, vk::ImageViewCreateInfo{ {}, image, vk::ImageViewType::e2D, vk::Format::eB8G8R8A8Unorm,
                 {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
@@ -164,11 +164,11 @@ struct Swapchain : Resource
         vk::raii::ImageView imageView;
         vk::raii::Fence inFlightFence;
         vk::raii::Semaphore nextImageAvailableSemaphore /* refers to the next frame */, renderFinishedSemaphore /* refers to current frame */;
-        const vk::raii::CommandBuffer& commandBuffer;
+        vk::raii::CommandBuffer commandBuffer;
     };
 
     Swapchain(const std::shared_ptr<Device>& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : Resource{ device }, currentImageIdx{ 0 }, previousImageIdx{ 0 },
-		swapchainKHR{ nullptr }, commandPool{ *dev, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }, commandBuffers{ nullptr }
+		swapchainKHR{ nullptr }, commandPool{ *dev, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }
     {
         const auto surfaceCapabilities = dev->physicalDevice.getSurfaceCapabilitiesKHR(*surface);
         const auto surfaceFormats = dev->physicalDevice.getSurfaceFormatsKHR(*surface);
@@ -180,7 +180,7 @@ struct Swapchain : Resource
             1u, vk::ImageUsageFlagBits::eColorAttachment };
         swapchainKHR = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfoKHR };
 
-        commandBuffers = vk::raii::CommandBuffers{ *dev, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } };
+        auto commandBuffers = vk::raii::CommandBuffers{ *dev, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } };
         const std::vector<vk::Image> images = swapchainKHR.getImages();
         frames.reserve(imageCount);
         for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(*dev, images[i], commandBuffers[i]);
@@ -213,10 +213,9 @@ struct Swapchain : Resource
 
     vk::Extent2D extent;
     uint32_t imageCount, currentImageIdx, previousImageIdx;
-    std::vector<Frame> frames;
     vk::raii::SwapchainKHR swapchainKHR;
-    const vk::raii::CommandPool commandPool;
-    vk::raii::CommandBuffers commandBuffers;
+    vk::raii::CommandPool commandPool;
+    std::vector<Frame> frames;
 };
 
 struct Shader : Resource
