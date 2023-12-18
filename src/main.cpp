@@ -221,11 +221,11 @@ struct Swapchain : Resource
 struct Shader : Resource
 {
     using Stage = std::pair<const vk::ShaderStageFlagBits, const std::reference_wrapper<const std::vector<uint32_t>>>;
-    Shader(const std::shared_ptr<Device>& device, const std::vector<Stage>& stages, const vk::PushConstantRange& pushConstantRange) : Resource{ device },
-        layout{ *dev, {{}, 0, {}, 1, &pushConstantRange } }
+    Shader(const std::shared_ptr<Device>& device, const std::vector<Stage>& stages, const std::vector<vk::PushConstantRange>& pcRanges) : Resource{ device },
+        layout{ *dev, vk::PipelineLayoutCreateInfo{}.setPushConstantRanges(pcRanges) }
     {
-        std::vector<vk::ShaderCreateInfoEXT> shaderCreateInfos{ stages.size(), { stages.size() > 1u ? vk::ShaderCreateFlagBitsEXT::eLinkStage : vk::ShaderCreateFlagsEXT{},
-        	{}, {}, vk::ShaderCodeTypeEXT::eSpirv, {}, {}, "main", {}, {}, 1, &pushConstantRange } };
+        std::vector shaderCreateInfos{ stages.size(), vk::ShaderCreateInfoEXT{ stages.size() > 1u ? vk::ShaderCreateFlagBitsEXT::eLinkStage : vk::ShaderCreateFlagsEXT{} }
+        	.setCodeType(vk::ShaderCodeTypeEXT::eSpirv).setPName("main").setPushConstantRanges(pcRanges) };
         for (size_t i = 0; i < stages.size(); ++i) {
             shaderCreateInfos[i].setStage(stages[i].first);
             if (i < (stages.size() - 1)) shaderCreateInfos[i].setNextStage(stages[i + 1u].first);
@@ -324,7 +324,7 @@ int main(int /*argc*/, char** /*argv*/)
     // Shader object setup
     // https://github.com/KhronosGroup/Vulkan-Docs/blob/main/proposals/VK_EXT_shader_object.adoc
     constexpr vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
-    Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, vertexShaderSPV }, { vk::ShaderStageFlagBits::eFragment, fragmentShaderSPV } }, pcRange };
+    Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, vertexShaderSPV }, { vk::ShaderStageFlagBits::eFragment, fragmentShaderSPV } }, { pcRange } };
 
     // Swapchain setup
     Swapchain swapchain{ device, surfaceKHR, queueFamilyIndex.value() };
