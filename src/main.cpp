@@ -62,8 +62,8 @@ bool extensionsOrLayersAvailable(const std::vector<T>& available, const std::vec
         return std::find_if(available.begin(), available.end(), [requestedElement](const T& availableElement) {
             if constexpr (std::is_same_v<vk::LayerProperties, T>) return std::string_view{ availableElement.layerName.data() }.compare(requestedElement) == 0;
             else if constexpr (std::is_same_v<vk::ExtensionProperties, T>) return std::string_view{ availableElement.extensionName.data() }.compare(requestedElement) == 0;
-            }) != available.end();
-        });
+        }) != available.end();
+    });
 }
 
 std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyProperties>& queueFamiliesProperties, vk::QueueFlags queueFlags) {
@@ -122,7 +122,7 @@ struct Device
     vk::raii::Device device;
     std::vector<std::vector<vk::raii::Queue>> queue;
     vk::raii::PhysicalDevice physicalDevice;
-	vk::PhysicalDeviceMemoryProperties memoryProperties;
+    vk::PhysicalDeviceMemoryProperties memoryProperties;
 };
 
 // Every resource has a device reference
@@ -153,8 +153,8 @@ struct Swapchain : Resource
 {
     // Data for one frame/image in our swapchain
     struct Frame {
-        Frame(const vk::raii::Device& device, const vk::Image& image, vk::raii::CommandBuffer& commandBuffer) : image{ image }, imageView{ nullptr }, 
-            inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } }, nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} }, 
+        Frame(const vk::raii::Device& device, const vk::Image& image, vk::raii::CommandBuffer& commandBuffer) : image{ image }, imageView{ nullptr },
+            inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } }, nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} },
             renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} }, commandBuffer{ std::move(commandBuffer) }
         {
             imageView = vk::raii::ImageView{ device, vk::ImageViewCreateInfo{ {}, image, vk::ImageViewType::e2D, vk::Format::eB8G8R8A8Unorm,
@@ -204,8 +204,8 @@ struct Swapchain : Resource
         curFrame.commandBuffer.end();
 
         constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        presentQueue.submit(vk::SubmitInfo{ *getPreviousFrame().nextImageAvailableSemaphore , waitDstStageMask, *curFrame.commandBuffer ,*curFrame.renderFinishedSemaphore }, *curFrame.inFlightFence);
-        resultCheck(presentQueue.presentKHR({ *curFrame.renderFinishedSemaphore,*swapchainKHR, currentImageIdx }), "present swapchain image error");
+        presentQueue.submit(vk::SubmitInfo{ *getPreviousFrame().nextImageAvailableSemaphore, waitDstStageMask, *curFrame.commandBuffer, *curFrame.renderFinishedSemaphore }, *curFrame.inFlightFence);
+        resultCheck(presentQueue.presentKHR({ *curFrame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx }), "present swapchain image error");
     }
 
     const Frame& getCurrentFrame() { return frames[currentImageIdx]; }
@@ -361,7 +361,7 @@ int main(int /*argc*/, char** /*argv*/)
             cmdBuffer.setSampleMaskEXT(vk::SampleCountFlagBits::e1, { 0xffffffff });
             cmdBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
             cmdBuffer.setViewportWithCountEXT({ { 0, 0, static_cast<float>(swapchain.extent.width), static_cast<float>(swapchain.extent.height) } });
-            cmdBuffer.setScissorWithCountEXT({ { {0, 0}, swapchain.extent } });
+            cmdBuffer.setScissorWithCountEXT({ { { 0, 0 }, swapchain.extent } });
             cmdBuffer.setVertexInputEXT({}, {});
             cmdBuffer.setColorBlendEnableEXT(0, vk::False);
             cmdBuffer.setDepthTestEnableEXT(vk::False);
