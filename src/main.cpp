@@ -174,6 +174,7 @@ struct Swapchain : Resource
         const auto surfaceFormats = dev->physicalDevice.getSurfaceFormatsKHR(*surface);
 
         imageCount = std::min(3u, surfaceCapabilities.maxImageCount);
+        currentImageIdx = imageCount - 1u; // just for init
         extent = surfaceCapabilities.currentExtent;
         const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ {}, *surface, imageCount,
             surfaceFormats[0].format, surfaceFormats[0].colorSpace, extent,
@@ -187,15 +188,16 @@ struct Swapchain : Resource
     }
 
     void acquireNextImage(const vk::raii::Device& device) {
-        const std::pair<vk::Result, uint32_t> nextImage = swapchainKHR.acquireNextImage(0, *getCurrentFrame().nextImageAvailableSemaphore);
+        const Frame& oldFrame = getCurrentFrame();
+        resultCheck(device.waitForFences(*oldFrame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error");
+        const std::pair<vk::Result, uint32_t> nextImage = swapchainKHR.acquireNextImage(0, *oldFrame.nextImageAvailableSemaphore);
         resultCheck(nextImage.first, "acquiring next swapchain image error");
         previousImageIdx = currentImageIdx;
         currentImageIdx = nextImage.second;
 
-        const Frame& frame = getCurrentFrame();
-        while (vk::Result::eTimeout == device.waitForFences(*frame.inFlightFence, vk::True, UINT64_MAX)) {}
-        device.resetFences(*frame.inFlightFence);
-        frame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+        const Frame& newFrame = getCurrentFrame();
+        device.resetFences(*newFrame.inFlightFence);
+        newFrame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
     }
 
     void submitImage(const vk::raii::Queue& presentQueue)
