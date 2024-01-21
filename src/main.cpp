@@ -369,6 +369,7 @@ int main(int /*argc*/, char** /*argv*/)
             cmdBuffer.setDepthBiasEnableEXT(vk::False);
             cmdBuffer.setStencilTestEnableEXT(vk::False);
             cmdBuffer.setRasterizerDiscardEnableEXT(vk::False);
+            cmdBuffer.setColorBlendEquationEXT(0, vk::ColorBlendEquationEXT{}.setSrcColorBlendFactor(vk::BlendFactor::eOne));
             cmdBuffer.setAlphaToCoverageEnableEXT(vk::False);
             cmdBuffer.setPrimitiveRestartEnableEXT(vk::False);
             cmdBuffer.draw(3, 1, 0, 0);
