@@ -186,27 +186,28 @@ struct Swapchain : Resource
         frames.reserve(imageCount);
         for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(*dev, images[i], commandBuffers[i]);
     }
+    ~Swapchain() { for (auto& frame : frames) resultCheck(dev->device.waitForFences(*frame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error"); }
 
-    void acquireNextImage(const vk::raii::Device& device) {
+    void acquireNextImage() {
         const Frame& oldFrame = getCurrentFrame();
-        resultCheck(device.waitForFences(*oldFrame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error");
-        const std::pair<vk::Result, uint32_t> nextImage = swapchainKHR.acquireNextImage(0, *oldFrame.nextImageAvailableSemaphore);
+        resultCheck(dev->device.waitForFences(*oldFrame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error");
+        dev->device.resetFences(*oldFrame.inFlightFence);
+        const std::pair<vk::Result, uint32_t> nextImage = swapchainKHR.acquireNextImage(0, *oldFrame.nextImageAvailableSemaphore, *oldFrame.inFlightFence);
         resultCheck(nextImage.first, "acquiring next swapchain image error");
         previousImageIdx = currentImageIdx;
         currentImageIdx = nextImage.second;
 
         const Frame& newFrame = getCurrentFrame();
-        device.resetFences(*newFrame.inFlightFence);
         newFrame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
     }
 
-    void submitImage(const vk::raii::Queue& presentQueue)
-    {
+    void submitImage(const vk::raii::Queue& presentQueue) {
         const Frame& curFrame = getCurrentFrame();
         curFrame.commandBuffer.end();
 
         constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        presentQueue.submit(vk::SubmitInfo{ *getPreviousFrame().nextImageAvailableSemaphore, waitDstStageMask, *curFrame.commandBuffer, *curFrame.renderFinishedSemaphore }, *curFrame.inFlightFence);
+        presentQueue.submit(vk::SubmitInfo{ *getPreviousFrame().nextImageAvailableSemaphore, waitDstStageMask,
+            *curFrame.commandBuffer, *curFrame.renderFinishedSemaphore });
         resultCheck(presentQueue.presentKHR({ *curFrame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx }), "present swapchain image error");
     }
 
@@ -337,7 +338,7 @@ int main(int /*argc*/, char** /*argv*/)
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GLFW_TRUE);
-        swapchain.acquireNextImage(*device);
+        swapchain.acquireNextImage();
         const auto& cFrame = swapchain.getCurrentFrame();
         const auto& cmdBuffer = cFrame.commandBuffer;
 
