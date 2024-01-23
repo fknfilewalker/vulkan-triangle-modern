@@ -260,7 +260,7 @@ int main(int /*argc*/, char** /*argv*/)
     for (uint32_t i = 0; i < glfwInstanceExtensionCount; ++i) iExtensions.emplace_back(glfwInstanceExtensionNames[i]);
     if constexpr (isApple) iExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
     
-	std::vector<const char*> iLayers;
+	std::vector iLayers = { "VK_LAYER_LUNARG_monitor" };
 #if !defined( NDEBUG )
     iLayers.emplace_back("VK_LAYER_KHRONOS_validation");
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
