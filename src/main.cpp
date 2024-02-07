@@ -176,7 +176,7 @@ struct Swapchain : Resource
         imageCount = std::min(3u, surfaceCapabilities.maxImageCount);
         currentImageIdx = imageCount - 1u; // just for init
         extent = surfaceCapabilities.currentExtent;
-        const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ { vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT }, *surface, imageCount,
+        const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ {}, *surface, imageCount,
             surfaceFormats[0].format, surfaceFormats[0].colorSpace, extent,
             1u, vk::ImageUsageFlagBits::eColorAttachment };
         swapchainKHR = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfoKHR };
@@ -298,14 +298,13 @@ int main(int /*argc*/, char** /*argv*/)
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surfaceKHR)) exitWithError("Queue family does not support presentation");
     // * check extensions
-    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::KHRDynamicRenderingExtensionName, vk::KHRSynchronization2ExtensionName, vk::EXTSwapchainMaintenance1ExtensionName };
+    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::KHRDynamicRenderingExtensionName, vk::KHRSynchronization2ExtensionName };
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
 
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
-    vk::PhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance{ true, &bufferDeviceAddressFeatures };
-    vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &swapchainMaintenance };
+    vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &bufferDeviceAddressFeatures };
     vk::PhysicalDeviceSynchronization2Features synchronization2Features{ true, &shaderObjectFeatures };
     vk::PhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{ true, &synchronization2Features };
     vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2{ {}, &dynamicRenderingFeatures };
