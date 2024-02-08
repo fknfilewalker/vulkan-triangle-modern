@@ -62,6 +62,14 @@ add_dependencies(${PROJECT_NAME} glfw)
 if(APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
     target_include_directories(${PROJECT_NAME} PRIVATE "${VTM_EXTERNAL_DIR}/vulkan-headers/include")
+
+    target_compile_definitions(${PROJECT_NAME} PUBLIC
+        VK_USE_PLATFORM_MACOS_MVK
+        VULKAN_HPP_NO_SMART_HANDLE
+        VULKAN_HPP_NO_SPACESHIP_OPERATOR
+        VULKAN_HPP_NO_TO_STRING
+        VK_NO_PROTOTYPES
+    )
 else()
     target_link_libraries(${PROJECT_NAME} PRIVATE VulkanCppModule)
     add_dependencies(${PROJECT_NAME} VulkanCppModule)
