@@ -16,34 +16,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 #================================#
 # Dependencies                   #
 #================================#
-if(APPLE)
-    # for moltenvk
-    find_package(Vulkan REQUIRED)
-else()
-    # set up vulkan C++ module target
-    add_library(VulkanCppModule)
-    target_sources(VulkanCppModule PUBLIC FILE_SET CXX_MODULES
-        FILES "${VTM_EXTERNAL_DIR}/vulkan-headers/include/vulkan/vulkan.cppm"
-    )
-    target_include_directories(VulkanCppModule PUBLIC "${VTM_EXTERNAL_DIR}/vulkan-headers/include")
-    target_compile_definitions(VulkanCppModule PUBLIC 
-        VULKAN_HPP_NO_SMART_HANDLE
-        VULKAN_HPP_NO_SPACESHIP_OPERATOR
-        VULKAN_HPP_NO_TO_STRING
-        VK_NO_PROTOTYPES
-    )
-    set_target_properties(VulkanCppModule PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/vulkan")
-endif()
-
-if(WIN32)
-    target_compile_definitions(VulkanCppModule PUBLIC 
-        VK_USE_PLATFORM_WIN32_KHR 
-        GLFW_EXPOSE_NATIVE_WIN32 
-        NOMINMAX
-    )
-elseif(APPLE)
-elseif(UNIX)
-endif()
+find_package(Vulkan REQUIRED)
 
 set(GLFW_BUILD_EXAMPLES OFF)
 set(GLFW_BUILD_TESTS OFF)
@@ -55,13 +28,13 @@ set_target_properties(glfw update_mappings PROPERTIES FOLDER "${VTM_EXTERNAL_FOL
 #================================#
 # Main Target                    #
 #================================#
-add_executable(${PROJECT_NAME} src/main.cpp src/shaders.h)
+add_executable(${PROJECT_NAME} src/main.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
 add_dependencies(${PROJECT_NAME} glfw)
+target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
+target_include_directories(${PROJECT_NAME} PRIVATE "${VTM_EXTERNAL_DIR}/vulkan-headers/include")
 
 if(APPLE)
-    target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
-    target_include_directories(${PROJECT_NAME} PRIVATE "${VTM_EXTERNAL_DIR}/vulkan-headers/include")
 
     target_compile_definitions(${PROJECT_NAME} PUBLIC
         VK_USE_PLATFORM_MACOS_MVK
@@ -71,8 +44,11 @@ if(APPLE)
         VK_NO_PROTOTYPES
     )
 else()
-    target_link_libraries(${PROJECT_NAME} PRIVATE VulkanCppModule)
-    add_dependencies(${PROJECT_NAME} VulkanCppModule)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC 
+        VK_USE_PLATFORM_WIN32_KHR 
+        GLFW_EXPOSE_NATIVE_WIN32 
+        NOMINMAX
+    )
 endif()
 
 install(TARGETS ${PROJECT_NAME} CONFIGURATIONS Debug DESTINATION "debug")
