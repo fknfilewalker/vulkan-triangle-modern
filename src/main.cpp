@@ -1,4 +1,3 @@
-#include <deque>
 #include <vulkan/vulkan_raii.hpp>
 #ifdef __APPLE__
 constexpr bool isApple = true;
@@ -7,6 +6,7 @@ constexpr bool isApple = false;
 #endif
 #include <GLFW/glfw3.h>
 
+#include <deque>
 #include <optional>
 #include <algorithm>
 #include <bitset>
@@ -93,11 +93,6 @@ struct Device
     vk::PhysicalDeviceMemoryProperties memoryProperties;
 };
 
-// Every resource has a device reference
-struct Resource { std::shared_ptr<Device> dev; };
-
-
-
 // Data for one frame/image in our swapchain
 struct Frame {
     Frame(const vk::raii::Device& device, const vk::raii::CommandPool& commandPool) :
@@ -112,7 +107,6 @@ struct Frame {
     vk::raii::Semaphore imageAvailableSemaphore, renderFinishedSemaphore;
     vk::raii::CommandBuffer commandBuffer;
 };
-
 
 int main(int /*argc*/, char** /*argv*/)
 {
@@ -212,10 +206,11 @@ int main(int /*argc*/, char** /*argv*/)
 
         constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         device->queue[queueFamilyIndex.value()][0].submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, waitDstStageMask,
-                *frame.commandBuffer,*frame.renderFinishedSemaphore });// , * frame.submitFence);
+                *frame.commandBuffer,*frame.renderFinishedSemaphore });
 
         vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
-        resultCheck(device->queue[queueFamilyIndex.value()][0].presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, image_idx, {}, &presentFenceInfo }), "present swapchain image error");
+        resultCheck(device->queue[queueFamilyIndex.value()][0].presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, image_idx, 
+            {}, &presentFenceInfo }), "present swapchain image error");
         auto status = frame.presentFinishFence.getStatus();
         while(status != vk::Result::eSuccess) status = frame.presentFinishFence.getStatus();
         // delete all frame resources
