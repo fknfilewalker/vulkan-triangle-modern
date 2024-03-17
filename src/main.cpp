@@ -153,11 +153,11 @@ struct Swapchain : Resource
 {
     // Data for one frame/image in our swapchain
     struct Frame {
-        Frame(const vk::raii::Device& device, const vk::Image& image, vk::raii::CommandBuffer& commandBuffer) : image{ image }, imageView{ nullptr },
+        Frame(const vk::raii::Device& device, const vk::Image& image, const vk::Format format, vk::raii::CommandBuffer& commandBuffer) : image{ image }, imageView{ nullptr },
             inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } }, nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} },
             renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} }, commandBuffer{ std::move(commandBuffer) }
         {
-            imageView = vk::raii::ImageView{ device, vk::ImageViewCreateInfo{ {}, image, vk::ImageViewType::e2D, vk::Format::eB8G8R8A8Unorm,
+            imageView = vk::raii::ImageView{ device, vk::ImageViewCreateInfo{ {}, image, vk::ImageViewType::e2D, format,
                 {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
         }
         vk::Image image;
@@ -173,7 +173,8 @@ struct Swapchain : Resource
         const auto surfaceCapabilities = dev->physicalDevice.getSurfaceCapabilitiesKHR(*surface);
         const auto surfaceFormats = dev->physicalDevice.getSurfaceFormatsKHR(*surface);
 
-        imageCount = std::min(3u, surfaceCapabilities.maxImageCount);
+        imageCount = std::max(3u, surfaceCapabilities.minImageCount);
+        if (surfaceCapabilities.maxImageCount) imageCount = std::min(imageCount, surfaceCapabilities.maxImageCount);
         currentImageIdx = imageCount - 1u; // just for init
         extent = surfaceCapabilities.currentExtent;
         const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ {}, *surface, imageCount,
@@ -184,7 +185,7 @@ struct Swapchain : Resource
         auto commandBuffers = vk::raii::CommandBuffers{ *dev, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } };
         const std::vector<vk::Image> images = swapchainKHR.getImages();
         frames.reserve(imageCount);
-        for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(*dev, images[i], commandBuffers[i]);
+        for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(*dev, images[i], surfaceFormats[0].format, commandBuffers[i]);
     }
     ~Swapchain() { for (auto& frame : frames) resultCheck(dev->device.waitForFences(*frame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error"); }
 
