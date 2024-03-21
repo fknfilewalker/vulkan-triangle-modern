@@ -218,21 +218,23 @@ struct Swapchain : Resource
 struct Shader : Resource
 {
     using Stage = std::pair<const vk::ShaderStageFlagBits, const std::reference_wrapper<const std::vector<uint32_t>>>;
-    Shader(const std::shared_ptr<Device>& device, const std::vector<Stage>& stages, const std::vector<vk::PushConstantRange>& pcRanges) : Resource{ device },
-        layout{ *dev, vk::PipelineLayoutCreateInfo{}.setPushConstantRanges(pcRanges) }
+    Shader(const std::shared_ptr<Device>& device, const std::vector<Stage>& shaderStages, const std::vector<vk::PushConstantRange>& pcRanges) : Resource{ device },
+        shaders{ shaderStages.size(), nullptr }, stages{ shaderStages.size() }, layout{ *dev, vk::PipelineLayoutCreateInfo{}.setPushConstantRanges(pcRanges) }
     {
-        std::vector shaderCreateInfos{ stages.size(), vk::ShaderCreateInfoEXT{ stages.size() > 1u ? vk::ShaderCreateFlagBitsEXT::eLinkStage : vk::ShaderCreateFlagsEXT{} }
-        	.setCodeType(vk::ShaderCodeTypeEXT::eSpirv).setPName("main").setPushConstantRanges(pcRanges) };
-        for (size_t i = 0; i < stages.size(); ++i) {
-            shaderCreateInfos[i].setStage(stages[i].first);
-            if (i < (stages.size() - 1)) shaderCreateInfos[i].setNextStage(stages[i + 1u].first);
-            shaderCreateInfos[i].setCode<uint32_t>(stages[i].second.get());
+        std::vector shaderCreateInfos{ shaderStages.size(), vk::ShaderCreateInfoEXT{ shaderStages.size() > 1u ? vk::ShaderCreateFlagBitsEXT::eLinkStage : vk::ShaderCreateFlagsEXT{} }
+            .setCodeType(vk::ShaderCodeTypeEXT::eSpirv).setPName("main").setPushConstantRanges(pcRanges) };
+        for (size_t i = 0; i < shaderStages.size(); ++i) {
+            shaderCreateInfos[i].setStage(shaderStages[i].first);
+            if (i < (shaderStages.size() - 1)) shaderCreateInfos[i].setNextStage(shaderStages[i + 1u].first);
+            shaderCreateInfos[i].setCode<uint32_t>(shaderStages[i].second.get());
+            stages[i] = shaderStages[i].first;
         }
         _shaders = dev->createShadersEXT(shaderCreateInfos);
-        for (const auto& shader : _shaders) shaders.emplace_back(*shader); // needed in order to pass the vector directly to bindShadersEXT()
+        for (size_t i = 0; i < shaderStages.size(); ++i) shaders[i] = *_shaders[i]; // needed in order to pass the vector directly to bindShadersEXT()
     }
     std::vector<vk::raii::ShaderEXT> _shaders;
     std::vector<vk::ShaderEXT> shaders;
+    std::vector<vk::ShaderStageFlagBits> stages;
     vk::raii::PipelineLayout layout;
 };
 
@@ -341,7 +343,7 @@ int main(int /*argc*/, char** /*argv*/)
         cmdBuffer.beginRendering({ {}, { {}, swapchain.extent }, 1, 0, 1, &rAttachmentInfo });
         {
             /* set render state for shader objects */
-            cmdBuffer.bindShadersEXT({ vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment }, shader.shaders);
+            cmdBuffer.bindShadersEXT(shader.stages, shader.shaders);
             cmdBuffer.pushConstants<uint64_t>(*shader.layout, vk::ShaderStageFlagBits::eVertex, 0, /* for bindless rendering */ buffer.deviceAddress);
             cmdBuffer.setPrimitiveTopologyEXT(vk::PrimitiveTopology::eTriangleList);
             cmdBuffer.setPolygonModeEXT(vk::PolygonMode::eFill);
