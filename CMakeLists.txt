@@ -64,7 +64,7 @@ if(APPLE)
     target_include_directories(${PROJECT_NAME} PRIVATE "${VTM_EXTERNAL_DIR}/vulkan-headers/include")
 
     target_compile_definitions(${PROJECT_NAME} PUBLIC
-        VK_USE_PLATFORM_MACOS_MVK
+        VK_USE_PLATFORM_METAL_EXT
         VULKAN_HPP_NO_SMART_HANDLE
         VULKAN_HPP_NO_SPACESHIP_OPERATOR
         VULKAN_HPP_NO_TO_STRING
