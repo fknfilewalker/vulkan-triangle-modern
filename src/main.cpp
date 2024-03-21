@@ -249,11 +249,12 @@ int main(int /*argc*/, char** /*argv*/)
     constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion12 };
 
     // Instance Setup
-    std::vector<const char*> iExtensions;
-    uint32_t glfwInstanceExtensionCount;
-    const char** glfwInstanceExtensionNames = glfwGetRequiredInstanceExtensions(&glfwInstanceExtensionCount);
-    iExtensions.reserve(static_cast<size_t>(glfwInstanceExtensionCount) + 1u);
-    for (uint32_t i = 0; i < glfwInstanceExtensionCount; ++i) iExtensions.emplace_back(glfwInstanceExtensionNames[i]);
+    std::vector iExtensions{ vk::KHRSurfaceExtensionName };
+#ifdef _WIN32
+	iExtensions.emplace_back(vk::KHRWin32SurfaceExtensionName);
+#elif __APPLE__
+    iExtensions.emplace_back(vk::EXTMetalSurfaceExtensionName);
+#endif
     if constexpr (isApple) iExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
     
 	std::vector iLayers = { "VK_LAYER_LUNARG_monitor" };
