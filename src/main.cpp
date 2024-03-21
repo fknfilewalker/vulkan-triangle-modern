@@ -83,13 +83,13 @@ std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyPr
     return bestFamily;
 }
 
-struct Device
+struct Device : vk::raii::Device
 {
-    using QueueFamily = uint16_t;
-    using QueueCount = uint16_t;
+    using QueueFamily = uint32_t;
+    using QueueCount = uint32_t;
     using Queues = std::unordered_map<QueueFamily, QueueCount>;
     Device(const vk::raii::PhysicalDevice& physicalDevice, const std::vector<const char*>& extensions, const Queues& queues, const void* pNext) :
-		device{ nullptr }, physicalDevice{ physicalDevice }, memoryProperties{ physicalDevice.getMemoryProperties() }
+        vk::raii::Device{ nullptr }, physicalDevice{ physicalDevice }, memoryProperties{ physicalDevice.getMemoryProperties() }
     {
         constexpr float priority = 1.0f;
         std::vector<vk::DeviceQueueCreateInfo> deviceQueueCreateInfos;
@@ -98,17 +98,15 @@ struct Device
             deviceQueueCreateInfos.emplace_back(vk::DeviceQueueCreateInfo{ {}, queueFamilyIndex, queueCount, &priority });
         }
         const vk::DeviceCreateInfo deviceCreateInfo{ {}, deviceQueueCreateInfos, {}, extensions,{}, pNext };
-        device = vk::raii::Device{ physicalDevice, deviceCreateInfo };
-        // get queues
+        vk::raii::Device::operator=({ physicalDevice, deviceCreateInfo });
+        // get all our queues -> queue[family][index]
         for (const auto& [queueFamilyIndex, queueCount] : queues) {
-            std::vector<vk::raii::Queue> queueFamily;
-            queueFamily.reserve(queueCount);
-            for (uint16_t i = 0; i < queueCount; ++i) queueFamily.emplace_back(device.getQueue(queueFamilyIndex, i));
-            queue.emplace_back(std::move(queueFamily));
+            queue.emplace_back(std::vector<vk::raii::Queue>{ queueCount, nullptr });
+            for (uint32_t i = 0; i < queueCount; ++i) queue.back()[i] = getQueue(queueFamilyIndex, i);
         }
     }
 
-    std::optional<uint32_t> findMemoryTypeIndex(const vk::MemoryRequirements& requirements, const vk::MemoryPropertyFlags properties) const
+    [[nodiscard]] std::optional<uint32_t> findMemoryTypeIndex(const vk::MemoryRequirements& requirements, const vk::MemoryPropertyFlags properties) const
     {
         for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i) {
             if ((requirements.memoryTypeBits & (1u << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) return i;
@@ -116,10 +114,8 @@ struct Device
         return std::nullopt;
     }
 
-    operator const vk::raii::Device& () const { return device; }
     operator const vk::raii::PhysicalDevice& () const { return physicalDevice; }
 
-    vk::raii::Device device;
     std::vector<std::vector<vk::raii::Queue>> queue;
     vk::raii::PhysicalDevice physicalDevice;
     vk::PhysicalDeviceMemoryProperties memoryProperties;
@@ -142,7 +138,7 @@ struct Buffer : Resource
         buffer.bindMemory(*memory, 0);
 
         const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo{ *buffer };
-        deviceAddress = dev->device.getBufferAddress(bufferDeviceAddressInfo); /* for bindless rendering */
+        deviceAddress = dev->getBufferAddress(bufferDeviceAddressInfo); /* for bindless rendering */
     }
     vk::raii::Buffer buffer;
     vk::raii::DeviceMemory memory;
@@ -167,8 +163,8 @@ struct Swapchain : Resource
         vk::raii::CommandBuffer commandBuffer;
     };
 
-    Swapchain(const std::shared_ptr<Device>& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : Resource{ device }, currentImageIdx{ 0 }, previousImageIdx{ 0 },
-		swapchainKHR{ nullptr }, commandPool{ *dev, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }
+    Swapchain(const std::shared_ptr<Device>& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : Resource{ device }, currentImageIdx{ 0 },
+		previousImageIdx{ 0 }, swapchainKHR{ nullptr }, commandPool{ *dev, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }
     {
         const auto surfaceCapabilities = dev->physicalDevice.getSurfaceCapabilitiesKHR(*surface);
         const auto surfaceFormats = dev->physicalDevice.getSurfaceFormatsKHR(*surface);
@@ -178,8 +174,7 @@ struct Swapchain : Resource
         currentImageIdx = imageCount - 1u; // just for init
         extent = surfaceCapabilities.currentExtent;
         const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ {}, *surface, imageCount,
-            surfaceFormats[0].format, surfaceFormats[0].colorSpace, extent,
-            1u, vk::ImageUsageFlagBits::eColorAttachment };
+            surfaceFormats[0].format, surfaceFormats[0].colorSpace, extent, 1u, vk::ImageUsageFlagBits::eColorAttachment };
         swapchainKHR = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfoKHR };
 
         auto commandBuffers = vk::raii::CommandBuffers{ *dev, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } };
@@ -187,12 +182,12 @@ struct Swapchain : Resource
         frames.reserve(imageCount);
         for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(*dev, images[i], surfaceFormats[0].format, commandBuffers[i]);
     }
-    ~Swapchain() { for (auto& frame : frames) resultCheck(dev->device.waitForFences(*frame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error"); }
+    ~Swapchain() { for (auto& frame : frames) resultCheck(dev->waitForFences(*frame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error"); }
 
     void acquireNextImage() {
         const Frame& oldFrame = getCurrentFrame();
-        resultCheck(dev->device.waitForFences(*oldFrame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error");
-        dev->device.resetFences(*oldFrame.inFlightFence);
+        resultCheck(dev->waitForFences(*oldFrame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error");
+        dev->resetFences(*oldFrame.inFlightFence);
         const std::pair<vk::Result, uint32_t> nextImage = swapchainKHR.acquireNextImage(0, *oldFrame.nextImageAvailableSemaphore, *oldFrame.inFlightFence);
         resultCheck(nextImage.first, "acquiring next swapchain image error");
         previousImageIdx = currentImageIdx;
@@ -235,7 +230,7 @@ struct Shader : Resource
             if (i < (stages.size() - 1)) shaderCreateInfos[i].setNextStage(stages[i + 1u].first);
             shaderCreateInfos[i].setCode<uint32_t>(stages[i].second.get());
         }
-        _shaders = dev->device.createShadersEXT(shaderCreateInfos);
+        _shaders = dev->createShadersEXT(shaderCreateInfos);
         for (const auto& shader : _shaders) shaders.emplace_back(*shader); // needed in order to pass the vector directly to bindShadersEXT()
     }
     std::vector<vk::raii::ShaderEXT> _shaders;
@@ -269,26 +264,20 @@ int main(int /*argc*/, char** /*argv*/)
 #endif
     if constexpr (isApple) iLayers.emplace_back("VK_LAYER_KHRONOS_shader_object");
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) exitWithError("Instance layers not available");
-
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
-    vk::InstanceCreateInfo instanceCreateInfo{};
-    instanceCreateInfo.setPApplicationInfo(&applicationInfo);
-    instanceCreateInfo.setPEnabledExtensionNames(iExtensions);
-    instanceCreateInfo.setPEnabledLayerNames(iLayers);
-	if constexpr (isApple) instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
 
+    vk::InstanceCreateInfo instanceCreateInfo{ {}, &applicationInfo, iLayers, iExtensions };
+	if constexpr (isApple) instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
     const vk::raii::Instance instance(context, instanceCreateInfo);
 
     // Surface Setup
     // unfortunately glfw surface creation does not work with the vulkan c++20 module
-    vk::raii::SurfaceKHR surfaceKHR{ nullptr };
 #ifdef _WIN32
-    const vk::Win32SurfaceCreateInfoKHR win32SurfaceCreateInfoKHR{ {}, nullptr, glfwGetWin32Window(window) };
-    surfaceKHR = vk::raii::SurfaceKHR{ instance, win32SurfaceCreateInfoKHR };
+    vk::raii::SurfaceKHR surfaceKHR { instance, vk::Win32SurfaceCreateInfoKHR{ {}, GetModuleHandle(nullptr), glfwGetWin32Window(window) } };
 #elif __APPLE__
     VkSurfaceKHR _surface;
     glfwCreateWindowSurface(*instance, window, nullptr, &_surface);
-    surfaceKHR = vk::raii::SurfaceKHR{ instance, _surface };
+    vk::raii::SurfaceKHR surfaceKHR { instance, _surface };
 #endif
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
@@ -385,7 +374,7 @@ int main(int /*argc*/, char** /*argv*/)
         cmdBuffer.pipelineBarrier2(dependencyInfo);
         swapchain.submitImage(device->queue[queueFamilyIndex.value()][0]);
     }
-    device->device.waitIdle();
+    device->waitIdle();
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
