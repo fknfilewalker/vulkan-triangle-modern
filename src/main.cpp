@@ -15,7 +15,6 @@ constexpr bool isApple = false;
 #include <unordered_map>
 #include <memory>
 
-constexpr bool fullscreen = false;
 constexpr uint32_t window_width = 800;
 constexpr uint32_t window_height = 600;
 [[maybe_unused]] constexpr std::string_view vertexShader = R"(
@@ -243,8 +242,7 @@ int main(int /*argc*/, char** /*argv*/)
     if (!glfwInit()) exitWithError("Failed to init GLFW");
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // No need to create a graphics context for Vulkan
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    GLFWmonitor* monitor = fullscreen ? glfwGetPrimaryMonitor() : nullptr;
-    GLFWwindow* window = glfwCreateWindow(window_width, window_height, "Vulkan Triangle Modern", monitor, nullptr);
+    GLFWwindow* window = glfwCreateWindow(window_width, window_height, "Vulkan Triangle Modern", nullptr, nullptr);
 
     const vk::raii::Context context{};
     constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion12 };
