@@ -123,23 +123,22 @@ struct Device : vk::raii::Device
 // Every resource has a device reference
 struct Resource { std::shared_ptr<Device> dev; };
 
-struct Buffer : Resource
+struct Buffer : vk::raii::Buffer, Resource
 {
     Buffer(const std::shared_ptr<Device>& device, const vk::DeviceSize size, const vk::BufferUsageFlags usageFlags, const vk::MemoryPropertyFlags memoryPropertyFlags)
-        : Resource{ device }, buffer{ *dev, { {}, size, usageFlags | vk::BufferUsageFlagBits::eShaderDeviceAddress } }, memory{ nullptr }
+        : vk::raii::Buffer{ *device, { {}, size, usageFlags | vk::BufferUsageFlagBits::eShaderDeviceAddress } }, Resource{ device }, memory{ nullptr }
     {
-        const auto memoryRequirements = buffer.getMemoryRequirements();
+        const auto memoryRequirements = getMemoryRequirements();
         const auto memoryTypeIndex = dev->findMemoryTypeIndex(memoryRequirements, memoryPropertyFlags);
         if (!memoryTypeIndex.has_value()) exitWithError("No memory type index found");
         constexpr vk::MemoryAllocateFlagsInfo memoryAllocateFlagsInfo{ vk::MemoryAllocateFlagBits::eDeviceAddress };
         const vk::MemoryAllocateInfo memoryAllocateInfo{ memoryRequirements.size, memoryTypeIndex.value(), &memoryAllocateFlagsInfo };
         memory = vk::raii::DeviceMemory{ *dev, memoryAllocateInfo };
-        buffer.bindMemory(*memory, 0);
+        bindMemory(*memory, 0);
 
-        const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo{ *buffer };
+        const vk::BufferDeviceAddressInfo bufferDeviceAddressInfo{ **this };
         deviceAddress = dev->getBufferAddress(bufferDeviceAddressInfo); /* for bindless rendering */
     }
-    vk::raii::Buffer buffer;
     vk::raii::DeviceMemory memory;
     vk::DeviceAddress deviceAddress;
 };
