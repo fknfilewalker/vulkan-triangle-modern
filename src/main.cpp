@@ -251,23 +251,23 @@ int main(int /*argc*/, char** /*argv*/)
     // Instance Setup
     std::vector iExtensions{ vk::KHRSurfaceExtensionName };
 #ifdef _WIN32
-	iExtensions.emplace_back(vk::KHRWin32SurfaceExtensionName);
+    iExtensions.emplace_back(vk::KHRWin32SurfaceExtensionName);
 #elif __APPLE__
     iExtensions.emplace_back(vk::EXTMetalSurfaceExtensionName);
 #endif
     if constexpr (isApple) iExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
 
-	std::vector iLayers = { "VK_LAYER_LUNARG_monitor" };
+    std::vector iLayers = { "VK_LAYER_LUNARG_monitor" };
 #if !defined( NDEBUG )
     iLayers.emplace_back("VK_LAYER_KHRONOS_validation");
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
 #endif
-	iLayers.emplace_back("VK_LAYER_KHRONOS_shader_object"); // always activate this layer since everyone except NVIDIA requires it for now
+    iLayers.emplace_back("VK_LAYER_KHRONOS_shader_object"); // always activate this layer since everyone except NVIDIA requires it for now
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) exitWithError("Instance layers not available");
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
 
     vk::InstanceCreateInfo instanceCreateInfo{ {}, &applicationInfo, iLayers, iExtensions };
-	if constexpr (isApple) instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
+    if constexpr (isApple) instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
     const vk::raii::Instance instance(context, instanceCreateInfo);
 
     // Surface Setup
