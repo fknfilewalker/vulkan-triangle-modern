@@ -326,6 +326,7 @@ int main(int /*argc*/, char** /*argv*/)
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        if (glfwGetWindowAttrib(window, GLFW_ICONIFIED)) continue;
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GLFW_TRUE);
         swapchain.acquireNextImage();
         const auto& cFrame = swapchain.getCurrentFrame();
