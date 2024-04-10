@@ -256,13 +256,13 @@ int main(int /*argc*/, char** /*argv*/)
     iExtensions.emplace_back(vk::EXTMetalSurfaceExtensionName);
 #endif
     if constexpr (isApple) iExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
-    
+
 	std::vector iLayers = { "VK_LAYER_LUNARG_monitor" };
 #if !defined( NDEBUG )
     iLayers.emplace_back("VK_LAYER_KHRONOS_validation");
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
 #endif
-    if constexpr (isApple) iLayers.emplace_back("VK_LAYER_KHRONOS_shader_object");
+	iLayers.emplace_back("VK_LAYER_KHRONOS_shader_object"); // always activate this layer since everyone except NVIDIA requires it for now
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) exitWithError("Instance layers not available");
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
 
