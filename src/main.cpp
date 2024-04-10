@@ -244,9 +244,7 @@ int main(int /*argc*/, char** /*argv*/)
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     GLFWwindow* window = glfwCreateWindow(target.width, target.height, "Vulkan Triangle Modern", nullptr, nullptr);
 
-    const vk::raii::Context context{};
-    constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion12 };
-
+    const vk::raii::Context context;
     // Instance Setup
     std::vector iExtensions{ vk::KHRSurfaceExtensionName };
 #ifdef _WIN32
@@ -265,6 +263,7 @@ int main(int /*argc*/, char** /*argv*/)
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) exitWithError("Instance layers not available");
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
 
+    constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion12 };
     vk::InstanceCreateInfo instanceCreateInfo{ {}, &applicationInfo, iLayers, iExtensions };
     if constexpr (isApple) instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
     const vk::raii::Instance instance(context, instanceCreateInfo);
