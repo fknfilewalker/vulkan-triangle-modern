@@ -15,8 +15,7 @@ constexpr bool isApple = false;
 #include <unordered_map>
 #include <memory>
 
-constexpr uint32_t window_width = 800;
-constexpr uint32_t window_height = 600;
+constexpr struct { uint32_t width, height; } target { 800u, 600u }; // our window
 [[maybe_unused]] constexpr std::string_view vertexShader = R"(
 #version 450
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
@@ -243,7 +242,7 @@ int main(int /*argc*/, char** /*argv*/)
     if (!glfwInit()) exitWithError("Failed to init GLFW");
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // No need to create a graphics context for Vulkan
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    GLFWwindow* window = glfwCreateWindow(window_width, window_height, "Vulkan Triangle Modern", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(target.width, target.height, "Vulkan Triangle Modern", nullptr, nullptr);
 
     const vk::raii::Context context{};
     constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion12 };
