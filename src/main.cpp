@@ -14,6 +14,7 @@ constexpr bool isApple = false;
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include <deque>
 
 constexpr struct { uint32_t width, height; } target { 800u, 600u }; // our window
 [[maybe_unused]] constexpr std::string_view vertexShader = R"(
@@ -146,22 +147,19 @@ struct Swapchain : Resource
 {
     // Data for one frame/image in our swapchain
     struct Frame {
-        Frame(const vk::raii::Device& device, const vk::Image& image, const vk::Format format, vk::raii::CommandBuffer& commandBuffer) : image{ image }, imageView{ nullptr },
-            inFlightFence{ device, vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled } }, nextImageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} },
-            renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} }, commandBuffer{ std::move(commandBuffer) }
-        {
-            imageView = vk::raii::ImageView{ device, vk::ImageViewCreateInfo{ {}, image, vk::ImageViewType::e2D, format,
-                {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
-        }
-        vk::Image image;
-        vk::raii::ImageView imageView;
-        vk::raii::Fence inFlightFence;
-        vk::raii::Semaphore nextImageAvailableSemaphore /* refers to the next frame */, renderFinishedSemaphore /* refers to current frame */;
+        Frame(const vk::raii::Device& device, const vk::raii::CommandPool& commandPool) :
+    		presentFinishFence{ device, vk::FenceCreateInfo{} },
+    		imageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} },
+    		renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} },
+    		commandBuffer{ std::move(vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, 1 } }[0]) }
+        {}
+        vk::raii::Fence presentFinishFence;
+        vk::raii::Semaphore imageAvailableSemaphore, renderFinishedSemaphore;
         vk::raii::CommandBuffer commandBuffer;
     };
 
-    Swapchain(const std::shared_ptr<Device>& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : Resource{ device }, currentImageIdx{ 0 },
-		previousImageIdx{ 0 }, swapchainKHR{ nullptr }, commandPool{ *dev, { vk::CommandPoolCreateFlagBits::eResetCommandBuffer, queueFamilyIndex } }
+    Swapchain(const std::shared_ptr<Device>& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : Resource{ device }, currentImageIdx{ 0 }, previousImageIdx{ 0 },
+		swapchainKHR{ nullptr }, commandPool{ *dev, { vk::CommandPoolCreateFlagBits::eTransient, queueFamilyIndex } }
     {
         const auto surfaceCapabilities = dev->physicalDevice.getSurfaceCapabilitiesKHR(*surface);
         const auto surfaceFormats = dev->physicalDevice.getSurfaceFormatsKHR(*surface);
@@ -170,48 +168,56 @@ struct Swapchain : Resource
         if (surfaceCapabilities.maxImageCount) imageCount = std::min(imageCount, surfaceCapabilities.maxImageCount);
         currentImageIdx = imageCount - 1u; // just for init
         extent = surfaceCapabilities.currentExtent;
-        const vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ {}, *surface, imageCount,
-            surfaceFormats[0].format, surfaceFormats[0].colorSpace, extent, 1u, vk::ImageUsageFlagBits::eColorAttachment };
+    	vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ { /*vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT*/ },
+    		*surface, imageCount, surfaceFormats[0].format, surfaceFormats[0].colorSpace,
+    		extent,1u, vk::ImageUsageFlagBits::eColorAttachment };
+        swapchainCreateInfoKHR.setPresentMode(vk::PresentModeKHR::eImmediate);
         swapchainKHR = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfoKHR };
 
-        auto commandBuffers = vk::raii::CommandBuffers{ *dev, { *commandPool, vk::CommandBufferLevel::ePrimary, imageCount } };
-        const std::vector<vk::Image> images = swapchainKHR.getImages();
-        frames.reserve(imageCount);
-        for (uint32_t i = 0; i < imageCount; ++i) frames.emplace_back(*dev, images[i], surfaceFormats[0].format, commandBuffers[i]);
+        images = swapchainKHR.getImages();
+        views.reserve(images.size());
+        for (size_t i = 0; i < images.size(); ++i) views.emplace_back(*device, vk::ImageViewCreateInfo{ {}, images[i], vk::ImageViewType::e2D, vk::Format::eB8G8R8A8Unorm, {},
+{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } });
     }
-    ~Swapchain() { for (auto& frame : frames) resultCheck(dev->waitForFences(*frame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error"); }
+
+    void clearFrames()
+    {
+        for (auto it = frames.begin(); it != frames.end(); (it->presentFinishFence.getStatus() == vk::Result::eSuccess) ? it = frames.erase(it) : ++it);
+    }
 
     void acquireNextImage() {
-        const Frame& oldFrame = getCurrentFrame();
-        resultCheck(dev->waitForFences(*oldFrame.inFlightFence, vk::True, UINT64_MAX), "waiting for fence error");
-        dev->resetFences(*oldFrame.inFlightFence);
-        const std::pair<vk::Result, uint32_t> nextImage = swapchainKHR.acquireNextImage(0, *oldFrame.nextImageAvailableSemaphore, *oldFrame.inFlightFence);
-        resultCheck(nextImage.first, "acquiring next swapchain image error");
-        previousImageIdx = currentImageIdx;
-        currentImageIdx = nextImage.second;
+        clearFrames(); // free frames that are done
+        frames.emplace_back(*dev, commandPool); // create a new frame
+        auto& frame = frames.back();
 
-        const Frame& newFrame = getCurrentFrame();
-        newFrame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+        auto [result, idx] = swapchainKHR.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore);
+        resultCheck(result, "acquiring next image error");
+        currentImageIdx = idx;
+		frame.commandBuffer.begin({});
     }
 
     void submitImage(const vk::raii::Queue& presentQueue) {
-        const Frame& curFrame = getCurrentFrame();
-        curFrame.commandBuffer.end();
+        auto& frame = frames.back();
+        frame.commandBuffer.end();
 
         constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        presentQueue.submit(vk::SubmitInfo{ *getPreviousFrame().nextImageAvailableSemaphore, waitDstStageMask,
-            *curFrame.commandBuffer, *curFrame.renderFinishedSemaphore });
-        resultCheck(presentQueue.presentKHR({ *curFrame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx }), "present swapchain image error");
+        presentQueue.submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, waitDstStageMask,
+            * frame.commandBuffer,* frame.renderFinishedSemaphore });
+        vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
+        resultCheck(presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx, {}, &presentFenceInfo }), "present swapchain image error");
     }
 
-    const Frame& getCurrentFrame() { return frames[currentImageIdx]; }
-    const Frame& getPreviousFrame() { return frames[previousImageIdx]; }
+    Frame& getCurrentFrame() { return frames.back(); }
+    vk::Image& getCurrentImage() { return images[currentImageIdx]; }
+    vk::raii::ImageView& getCurrentImageView() { return views[currentImageIdx]; }
 
     vk::Extent2D extent;
     uint32_t imageCount, currentImageIdx, previousImageIdx;
     vk::raii::SwapchainKHR swapchainKHR;
+    std::vector<vk::Image> images;
+    std::vector<vk::raii::ImageView> views;
     vk::raii::CommandPool commandPool;
-    std::vector<Frame> frames;
+    std::deque<Frame> frames;
 };
 
 struct Shader : Resource
@@ -246,7 +252,7 @@ int main(int /*argc*/, char** /*argv*/)
 
     const vk::raii::Context context;
     // Instance Setup
-    std::vector iExtensions{ vk::KHRSurfaceExtensionName };
+    std::vector iExtensions{ vk::KHRSurfaceExtensionName, vk::EXTSurfaceMaintenance1ExtensionName, vk::KHRGetSurfaceCapabilities2ExtensionName };
 #ifdef _WIN32
     iExtensions.emplace_back(vk::KHRWin32SurfaceExtensionName);
 #elif __APPLE__
@@ -286,13 +292,14 @@ int main(int /*argc*/, char** /*argv*/)
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surfaceKHR)) exitWithError("Queue family does not support presentation");
     // * check extensions
-    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::KHRDynamicRenderingExtensionName, vk::KHRSynchronization2ExtensionName };
+    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::KHRDynamicRenderingExtensionName, vk::KHRSynchronization2ExtensionName, vk::EXTSwapchainMaintenance1ExtensionName };
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
 
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
     vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
-    vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &bufferDeviceAddressFeatures };
+    vk::PhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance{ true, &bufferDeviceAddressFeatures };
+    vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &swapchainMaintenance };
     vk::PhysicalDeviceSynchronization2Features synchronization2Features{ true, &shaderObjectFeatures };
     vk::PhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{ true, &synchronization2Features };
     vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2{ {}, &dynamicRenderingFeatures };
@@ -331,12 +338,12 @@ int main(int /*argc*/, char** /*argv*/)
         const auto& cFrame = swapchain.getCurrentFrame();
         const auto& cmdBuffer = cFrame.commandBuffer;
 
-        imageMemoryBarrier.image = cFrame.image;
+        imageMemoryBarrier.image = swapchain.getCurrentImage();
         imageMemoryBarrier.oldLayout = vk::ImageLayout::eUndefined;
         imageMemoryBarrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
         cmdBuffer.pipelineBarrier2(dependencyInfo);
-
-        vk::RenderingAttachmentInfo rAttachmentInfo{ *cFrame.imageView, vk::ImageLayout::eColorAttachmentOptimal };
+        
+        vk::RenderingAttachmentInfo rAttachmentInfo{ *swapchain.getCurrentImageView(), vk::ImageLayout::eColorAttachmentOptimal};
         rAttachmentInfo.clearValue.color = { 0.0f, 0.0f, 0.0f, 1.0f };
         rAttachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
         rAttachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
