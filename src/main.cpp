@@ -177,15 +177,14 @@ struct Swapchain : Resource
         for (const auto& image : images) views.emplace_back(nullptr);
     }
 
-    void clearFrames() {
-        for (auto it = frames.begin(); it != frames.end(); (it->presentFinishFence.getStatus() == vk::Result::eSuccess) ? it = frames.erase(it) : ++it);
+    Frame& acquireNewFrame() {
+        for (auto it = frames.begin(); it != frames.end(); (it->presentFinishFence.getStatus() == vk::Result::eSuccess) ? it = frames.erase(it) : ++it) {}
+        frames.emplace_back(*dev, commandPool); // create a new frame
+        return frames.back();
     }
 
     void acquireNextImage() {
-        clearFrames(); // free frames that are done
-        frames.emplace_back(*dev, commandPool); // create a new frame
-        auto& frame = frames.back();
-
+        auto& frame = acquireNewFrame();
         auto [result, idx] = swapchainKHR.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore);
         resultCheck(result, "acquiring next image error");
         currentImageIdx = idx;
