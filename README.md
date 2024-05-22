@@ -4,10 +4,12 @@ Render a vulkan triangle in ~390 lines of [code](https://github.com/fknfilewalke
 
 ### Highlights
 * Vulkan hpp headers included as a c++ module (c++20 required)
-* Dynamic rendering
-* Shader objects
-* Bindless rendering using buffer references
+* Dynamic rendering (`VK_KHR_dynamic_rendering`)
+* Shader objects (`VK_EXT_shader_object`)
+* Bindless rendering using buffer references (`VK_EXT_buffer_device_address`)
 * (Resizable) BAR for device local buffer access
+* Deferred swapchain image allocation (`VK_EXT_swapchain_maintenance1`)
+* Straightforward swapchain sync (`VK_EXT_swapchain_maintenance1`)
 * Modular code
 
 ### How to build (on windows)

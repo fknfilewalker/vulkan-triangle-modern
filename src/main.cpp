@@ -145,12 +145,10 @@ struct Buffer : vk::raii::Buffer, Resource
 
 struct Swapchain : Resource
 {
-    // Data for one frame/image in our swapchain
+    // Data for one frame/image in our swapchain, recreated every frame
     struct Frame {
         Frame(const vk::raii::Device& device, const vk::raii::CommandPool& commandPool) :
-    		presentFinishFence{ device, vk::FenceCreateInfo{} },
-    		imageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} },
-    		renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} },
+    		presentFinishFence{ device, vk::FenceCreateInfo{} }, imageAvailableSemaphore{ device, vk::SemaphoreCreateInfo{} }, renderFinishedSemaphore{ device, vk::SemaphoreCreateInfo{} },
     		commandBuffer{ std::move(vk::raii::CommandBuffers{ device, { *commandPool, vk::CommandBufferLevel::ePrimary, 1 } }[0]) }
         {}
         vk::raii::Fence presentFinishFence;
@@ -166,9 +164,9 @@ struct Swapchain : Resource
 
         imageCount = std::max(3u, surfaceCapabilities.minImageCount);
         if (surfaceCapabilities.maxImageCount) imageCount = std::min(imageCount, surfaceCapabilities.maxImageCount);
-        currentImageIdx = imageCount - 1u; // just for init
+        currentImageIdx = imageCount - 1u; // for init
         extent = surfaceCapabilities.currentExtent;
-    	vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ { /*vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT*/ },
+        vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ { vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT },
     		*surface, imageCount, surfaceFormats[0].format, surfaceFormats[0].colorSpace,
     		extent,1u, vk::ImageUsageFlagBits::eColorAttachment };
         swapchainCreateInfoKHR.setPresentMode(vk::PresentModeKHR::eImmediate);
@@ -176,12 +174,10 @@ struct Swapchain : Resource
 
         images = swapchainKHR.getImages();
         views.reserve(images.size());
-        for (size_t i = 0; i < images.size(); ++i) views.emplace_back(*device, vk::ImageViewCreateInfo{ {}, images[i], vk::ImageViewType::e2D, vk::Format::eB8G8R8A8Unorm, {},
-{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } });
+        for (const auto& image : images) views.emplace_back(nullptr);
     }
 
-    void clearFrames()
-    {
+    void clearFrames() {
         for (auto it = frames.begin(); it != frames.end(); (it->presentFinishFence.getStatus() == vk::Result::eSuccess) ? it = frames.erase(it) : ++it);
     }
 
@@ -193,6 +189,12 @@ struct Swapchain : Resource
         auto [result, idx] = swapchainKHR.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore);
         resultCheck(result, "acquiring next image error");
         currentImageIdx = idx;
+
+        if(not *views[currentImageIdx]) /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */ {
+        	views[currentImageIdx] = vk::raii::ImageView{ *dev, vk::ImageViewCreateInfo{ {}, images[currentImageIdx], vk::ImageViewType::e2D,
+        		vk::Format::eB8G8R8A8Unorm, {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
+        }
+
 		frame.commandBuffer.begin({});
     }
 
@@ -319,8 +321,7 @@ int main(int /*argc*/, char** /*argv*/)
     std::memcpy(p, vertices.data(), verticesSize);
     buffer.memory.unmapMemory();
 
-    // Shader object setup
-    // https://github.com/KhronosGroup/Vulkan-Docs/blob/main/proposals/VK_EXT_shader_object.adoc
+    // Shader object setup : https://github.com/KhronosGroup/Vulkan-Docs/blob/main/proposals/VK_EXT_shader_object.adoc
     constexpr vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
     Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, vertexShaderSPV }, { vk::ShaderStageFlagBits::eFragment, fragmentShaderSPV } }, { pcRange } };
 
