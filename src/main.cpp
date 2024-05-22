@@ -165,9 +165,9 @@ struct Swapchain : Resource
         imageCount = std::max(3u, surfaceCapabilities.minImageCount);
         if (surfaceCapabilities.maxImageCount) imageCount = std::min(imageCount, surfaceCapabilities.maxImageCount);
         currentImageIdx = imageCount - 1u; // for init
-        extent = surfaceCapabilities.currentExtent;
+        extent = surfaceCapabilities.currentExtent; format = surfaceFormats[0].format;
         vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ { vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT },
-    		*surface, imageCount, surfaceFormats[0].format, surfaceFormats[0].colorSpace,
+    		*surface, imageCount, format, surfaceFormats[0].colorSpace,
     		extent,1u, vk::ImageUsageFlagBits::eColorAttachment };
         swapchainCreateInfoKHR.setPresentMode(vk::PresentModeKHR::eImmediate);
         swapchainKHR = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfoKHR };
@@ -191,7 +191,7 @@ struct Swapchain : Resource
 
         if(not *views[currentImageIdx]) /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */ {
         	views[currentImageIdx] = vk::raii::ImageView{ *dev, vk::ImageViewCreateInfo{ {}, images[currentImageIdx], vk::ImageViewType::e2D,
-        		vk::Format::eB8G8R8A8Unorm, {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
+                format, {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
         }
 
 		frame.commandBuffer.begin({});
@@ -213,6 +213,7 @@ struct Swapchain : Resource
     vk::raii::ImageView& getCurrentImageView() { return views[currentImageIdx]; }
 
     vk::Extent2D extent;
+    vk::Format format;
     uint32_t imageCount, currentImageIdx, previousImageIdx;
     vk::raii::SwapchainKHR swapchainKHR;
     std::vector<vk::Image> images;
