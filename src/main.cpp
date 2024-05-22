@@ -186,7 +186,7 @@ struct Swapchain : Resource
     void acquireNextImage() {
         auto& frame = acquireNewFrame();
         auto [result, idx] = swapchainKHR.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore);
-        resultCheck(result, "acquiring next image error");
+        vk::detail::resultCheck(result, "acquiring next image error");
         currentImageIdx = idx;
 
         if(not *views[currentImageIdx]) /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */ {
@@ -205,7 +205,7 @@ struct Swapchain : Resource
         presentQueue.submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, waitDstStageMask,
             * frame.commandBuffer,* frame.renderFinishedSemaphore });
         vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
-        resultCheck(presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx, {}, &presentFenceInfo }), "present swapchain image error");
+        vk::detail::resultCheck(presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx, {}, &presentFenceInfo }), "present swapchain image error");
     }
 
     Frame& getCurrentFrame() { return frames.back(); }
