@@ -21,3 +21,4 @@ Use CMake for project configuration. The included `make.bat` script can be used 
 ### Notes
 * `VK_EXT_swapchain_maintenance1` still has some validation bugs (the semaphore validation error should go away with the next SDK update)
 * Linux not implemented yet
+* Code will become shorter once I replace the macos fallback to just c++ modules
