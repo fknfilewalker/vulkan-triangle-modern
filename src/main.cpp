@@ -188,13 +188,12 @@ struct Swapchain : Resource
         auto [result, idx] = swapchainKHR.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore);
         vk::detail::resultCheck(result, "acquiring next image error");
         currentImageIdx = idx;
-
-        if(not *views[currentImageIdx]) /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */ {
+        /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */
+        if(not *views[currentImageIdx]) {
         	views[currentImageIdx] = vk::raii::ImageView{ *dev, vk::ImageViewCreateInfo{ {}, images[currentImageIdx], vk::ImageViewType::e2D,
                 format, {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
         }
-
-		frame.commandBuffer.begin({});
+        frame.commandBuffer.begin({});
     }
 
     void submitImage(const vk::raii::Queue& presentQueue) {
@@ -202,8 +201,8 @@ struct Swapchain : Resource
         frame.commandBuffer.end();
 
         constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        presentQueue.submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, waitDstStageMask,
-            * frame.commandBuffer,* frame.renderFinishedSemaphore });
+        presentQueue.submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, 
+            waitDstStageMask, *frame.commandBuffer, *frame.renderFinishedSemaphore });
         vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
         vk::detail::resultCheck(presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx, {}, &presentFenceInfo }), "present swapchain image error");
     }
