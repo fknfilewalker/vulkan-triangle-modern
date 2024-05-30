@@ -10,7 +10,7 @@ Render a vulkan triangle in ~380 lines of [code](https://github.com/fknfilewalke
 * (Resizable) BAR for device local buffer access
 * Deferred swapchain image allocation (`VK_EXT_swapchain_maintenance1`)
 * Straightforward swapchain sync (`VK_EXT_swapchain_maintenance1`)
-* Slang used for shader code
+* [Slang](https://github.com/shader-slang/slang) used for shader code
 * Modular code
 
 ### How to build (on windows)
