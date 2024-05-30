@@ -17,34 +17,19 @@ constexpr bool isApple = false;
 #include <deque>
 
 constexpr struct { uint32_t width, height; } target { 800u, 600u }; // our window
-[[maybe_unused]] constexpr std::string_view vertexShader = R"(
-#version 450
-#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
-#extension GL_EXT_scalar_block_layout : require
-#extension GL_EXT_buffer_reference : require
-#extension GL_EXT_buffer_reference2 : require
+[[maybe_unused]] constexpr std::string_view shaders = R"(
+[[vk::push_constant]] float3* vertices;
 
-const uint64_t sizeOfFloat = 4ul;
-const uint64_t sizeOfVec3 = 3ul * sizeOfFloat;
-
-layout(buffer_reference, scalar) readonly buffer Vertex
+[shader("vertex")]
+float4 vertexMain(uint vid : SV_VertexID) : SV_Position
 {
-	vec3 position;
-};
-layout(push_constant, scalar) uniform pushConstant
-{
-	uint64_t vertexPtr; /* for bindless rendering */
-};
+    return float4(vertices[vid], 1.0);
+}
 
-void main() {
-	Vertex vertex = Vertex(vertexPtr + sizeOfVec3 * gl_VertexIndex);
-	gl_Position = vec4(vertex.position.xy, 0.0, 1.0);
-})";
-[[maybe_unused]] constexpr std::string_view fragmentShader = R"(
-#version 450
-layout (location = 0) out vec4 fragColor;
-void main() {
-	fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+[shader("fragment")]
+float4 fragmentMain() : SV_Target
+{
+    return float4(1.0, 0.0, 0.0, 1.0);
 })";
 
 #include "shaders.h"
@@ -223,17 +208,20 @@ struct Swapchain : Resource
 
 struct Shader : Resource
 {
-    using Stage = std::pair<const vk::ShaderStageFlagBits, const std::reference_wrapper<const std::vector<uint32_t>>>;
+    struct Stage {
+        Stage(const vk::ShaderStageFlagBits stage, const std::reference_wrapper<const std::vector<uint32_t>> spv, const std::string& entry = "main") : stage{ stage }, spv{ spv }, entry{ entry } {}
+		vk::ShaderStageFlagBits stage; std::reference_wrapper<const std::vector<uint32_t>> spv; std::string entry;
+	};
     Shader(const std::shared_ptr<Device>& device, const std::vector<Stage>& shaderStages, const std::vector<vk::PushConstantRange>& pcRanges) : Resource{ device },
         shaders{ shaderStages.size(), nullptr }, stages{ shaderStages.size() }, layout{ *dev, vk::PipelineLayoutCreateInfo{}.setPushConstantRanges(pcRanges) }
     {
         std::vector shaderCreateInfos{ shaderStages.size(), vk::ShaderCreateInfoEXT{ shaderStages.size() > 1u ? vk::ShaderCreateFlagBitsEXT::eLinkStage : vk::ShaderCreateFlagsEXT{} }
-            .setCodeType(vk::ShaderCodeTypeEXT::eSpirv).setPName("main").setPushConstantRanges(pcRanges) };
+            .setCodeType(vk::ShaderCodeTypeEXT::eSpirv).setPushConstantRanges(pcRanges) };
         for (size_t i = 0; i < shaderStages.size(); ++i) {
-            shaderCreateInfos[i].setStage(shaderStages[i].first);
-            if (i < (shaderStages.size() - 1)) shaderCreateInfos[i].setNextStage(shaderStages[i + 1u].first);
-            shaderCreateInfos[i].setCode<uint32_t>(shaderStages[i].second.get());
-            stages[i] = shaderStages[i].first;
+            shaderCreateInfos[i].setStage(shaderStages[i].stage).setPName(shaderStages[i].entry.c_str());
+            if (i < (shaderStages.size() - 1)) shaderCreateInfos[i].setNextStage(shaderStages[i + 1u].stage);
+            shaderCreateInfos[i].setCode<uint32_t>(shaderStages[i].spv.get());
+            stages[i] = shaderStages[i].stage;
         }
         _shaders = dev->createShadersEXT(shaderCreateInfos);
         for (size_t i = 0; i < shaderStages.size(); ++i) shaders[i] = *_shaders[i]; // needed in order to pass the vector directly to bindShadersEXT()
@@ -298,7 +286,8 @@ int main(int /*argc*/, char** /*argv*/)
 
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
-    vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{ true };
+    auto vulkan11Features = vk::PhysicalDeviceVulkan11Features{}.setVariablePointers(true).setVariablePointersStorageBuffer(true);
+	auto bufferDeviceAddressFeatures = vk::PhysicalDeviceBufferDeviceAddressFeatures{ true }.setPNext(&vulkan11Features);
     vk::PhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance{ true, &bufferDeviceAddressFeatures };
     vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &swapchainMaintenance };
     vk::PhysicalDeviceSynchronization2Features synchronization2Features{ true, &shaderObjectFeatures };
@@ -322,7 +311,7 @@ int main(int /*argc*/, char** /*argv*/)
 
     // Shader object setup : https://github.com/KhronosGroup/Vulkan-Docs/blob/main/proposals/VK_EXT_shader_object.adoc
     constexpr vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
-    Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, vertexShaderSPV }, { vk::ShaderStageFlagBits::eFragment, fragmentShaderSPV } }, { pcRange } };
+    Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, shaders_spv, "vertexMain" }, { vk::ShaderStageFlagBits::eFragment, shaders_spv, "fragmentMain" } }, { pcRange } };
 
     // Swapchain setup
     Swapchain swapchain{ device, surfaceKHR, queueFamilyIndex.value() };
