@@ -287,7 +287,7 @@ int main(int /*argc*/, char** /*argv*/)
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
     auto vulkan11Features = vk::PhysicalDeviceVulkan11Features{}.setVariablePointers(true).setVariablePointersStorageBuffer(true);
-	auto bufferDeviceAddressFeatures = vk::PhysicalDeviceBufferDeviceAddressFeatures{ true }.setPNext(&vulkan11Features);
+    auto bufferDeviceAddressFeatures = vk::PhysicalDeviceBufferDeviceAddressFeatures{ true }.setPNext(&vulkan11Features);
     vk::PhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance{ true, &bufferDeviceAddressFeatures };
     vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &swapchainMaintenance };
     vk::PhysicalDeviceSynchronization2Features synchronization2Features{ true, &shaderObjectFeatures };
