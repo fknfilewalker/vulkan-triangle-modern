@@ -20,4 +20,4 @@ Use CMake for project configuration. The included `make.bat` script can be used 
 
 ### Notes
 * `VK_EXT_swapchain_maintenance1` still has some validation bugs (the semaphore validation error should go away with the next SDK update)
-* Linux window handling is not yet implemented because of the reason stated above.
+* Linux not implemented yet
