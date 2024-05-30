@@ -154,7 +154,7 @@ struct Swapchain : Resource
         vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ { vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT },
     		*surface, imageCount, format, surfaceFormats[0].colorSpace,
     		extent,1u, vk::ImageUsageFlagBits::eColorAttachment };
-        swapchainCreateInfoKHR.setPresentMode(vk::PresentModeKHR::eImmediate);
+        swapchainCreateInfoKHR.setPresentMode(vk::PresentModeKHR::eFifo);
         swapchainKHR = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfoKHR };
 
         images = swapchainKHR.getImages();
