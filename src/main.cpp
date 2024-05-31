@@ -360,7 +360,7 @@ int main(int /*argc*/, char** /*argv*/)
             cmdBuffer.setViewportWithCountEXT({ { 0, 0, static_cast<float>(swapchain.extent.width), static_cast<float>(swapchain.extent.height) } });
             cmdBuffer.setScissorWithCountEXT({ { { 0, 0 }, swapchain.extent } });
             cmdBuffer.setVertexInputEXT({}, {});
-            cmdBuffer.setColorBlendEnableEXT(0, false);
+            cmdBuffer.setColorBlendEnableEXT(0, { false });
             cmdBuffer.setDepthTestEnableEXT(false);
             cmdBuffer.setDepthWriteEnableEXT(false);
             cmdBuffer.setDepthBiasEnableEXT(false);
