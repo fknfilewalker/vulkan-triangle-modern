@@ -272,9 +272,9 @@ int main(int /*argc*/, char** /*argv*/)
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     vk::raii::SurfaceKHR surfaceKHR { instance, vk::Win32SurfaceCreateInfoKHR{ {}, GetModuleHandle(nullptr), wmInfo.info.win.window } };
 #elif VK_USE_PLATFORM_XLIB_KHR
-    //vk::raii::SurfaceKHR surfaceKHR { instance, vk::XlibSurfaceCreateInfoKHR{ {}, glfwGetX11Display(), glfwGetX11Window(window) } };
+    //vk::raii::SurfaceKHR surfaceKHR { instance, vk::XlibSurfaceCreateInfoKHR{ {}, wmInfo.info.x11.display, wmInfo.info.x11.window } };
 #elif VK_USE_PLATFORM_WAYLAND_KHR
-    //vk::raii::SurfaceKHR surfaceKHR { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, glfwGetWaylandDisplay(), glfwGetWaylandWindow(window) } };
+    //vk::raii::SurfaceKHR surfaceKHR { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, wmInfo.info.wl.display, wmInfo.info.wl.surface } };
 #elif VK_USE_PLATFORM_METAL_EXT
     vk::raii::SurfaceKHR surfaceKHR{ instance, vk::MetalSurfaceCreateInfoEXT{ {}, SDL_Metal_GetLayer(SDL_Metal_CreateView(window)) }};
 #endif
