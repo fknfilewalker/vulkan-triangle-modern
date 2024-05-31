@@ -315,7 +315,7 @@ int main(int /*argc*/, char** /*argv*/)
 
     // Shader object setup : https://github.com/KhronosGroup/Vulkan-Docs/blob/main/proposals/VK_EXT_shader_object.adoc
     constexpr vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
-    Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, shaders_spv, "vertexMain" }, { vk::ShaderStageFlagBits::eFragment, shaders_spv, "fragmentMain" } }, { pcRange } };
+    Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, vert_spv, "main" }, { vk::ShaderStageFlagBits::eFragment, frag_spv, "main" } }, { pcRange } };
 
     // Swapchain setup
     Swapchain swapchain{ device, surfaceKHR, queueFamilyIndex.value() };
