@@ -1,5 +1,7 @@
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
+#include <SDL3/SDL.h>
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 #include <optional>
 #include <algorithm>
 #include <bitset>
@@ -235,7 +237,7 @@ struct Shader : Resource
 int main(int /*argc*/, char** /*argv*/)
 {
     if (SDL_Init(0)) exitWithError("Failed to init SDL");
-    SDL_Window* window = SDL_CreateWindow("Vulkan Triangle Modern", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, target.width, target.height, 0);
+    SDL_Window* window = SDL_CreateWindow("Vulkan Triangle Modern", target.width, target.height, 0);
 
     const vk::raii::Context context;
     // Instance Setup
@@ -266,11 +268,8 @@ int main(int /*argc*/, char** /*argv*/)
     const vk::raii::Instance instance(context, instanceCreateInfo);
 
     // Surface Setup
-    SDL_SysWMinfo wmInfo;
-    SDL_VERSION(&wmInfo.version);
-    SDL_GetWindowWMInfo(window, &wmInfo);
 #ifdef VK_USE_PLATFORM_WIN32_KHR
-    vk::raii::SurfaceKHR surfaceKHR { instance, vk::Win32SurfaceCreateInfoKHR{ {}, GetModuleHandle(nullptr), wmInfo.info.win.window } };
+    vk::raii::SurfaceKHR surfaceKHR { instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, (HWND)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) } };
 #elif VK_USE_PLATFORM_XLIB_KHR
     vk::raii::SurfaceKHR surfaceKHR { instance, vk::XlibSurfaceCreateInfoKHR{ {}, wmInfo.info.x11.display, wmInfo.info.x11.window } };
 #elif VK_USE_PLATFORM_WAYLAND_KHR
@@ -328,7 +327,7 @@ int main(int /*argc*/, char** /*argv*/)
     while (running) {
         SDL_Event windowEvent;
         while (SDL_PollEvent(&windowEvent)) {
-            if (windowEvent.type == SDL_QUIT) {
+            if (windowEvent.type == SDL_EVENT_QUIT) {
                 running = false;
                 break;
             }
