@@ -71,7 +71,7 @@ set(SDL_RENDER_OPENGLES OFF)
 set(SDL_RENDER_VULKAN OFF)
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 add_subdirectory("${VTM_EXTERNAL_DIR}/sdl")
-target_compile_definitions(SDL2-static PUBLIC SDL_MAIN_HANDLED SDL_VIDEO_DRIVER_WINDOWS)
+target_compile_definitions(SDL2-static PUBLIC SDL_MAIN_HANDLED)
 set_target_properties(sdl_headers_copy SDL2-static PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/sdl")
 
 #================================#
