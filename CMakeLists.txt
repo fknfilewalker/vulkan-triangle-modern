@@ -37,33 +37,40 @@ endif()
 
 if(WIN32)
     target_compile_definitions(VulkanCppModule PUBLIC 
-        VK_USE_PLATFORM_WIN32_KHR 
-        GLFW_EXPOSE_NATIVE_WIN32 
+        VK_USE_PLATFORM_WIN32_KHR
         NOMINMAX
     )
 elseif(APPLE)
 elseif(UNIX)
     target_compile_definitions(VulkanCppModule PUBLIC
         VK_USE_PLATFORM_XLIB_KHR
-        GLFW_EXPOSE_NATIVE_X11
         # VK_USE_PLATFORM_WAYLAND_KHR
-        # GLFW_EXPOSE_NATIVE_WAYLAND
     )
 endif()
 
-set(GLFW_BUILD_EXAMPLES OFF)
-set(GLFW_BUILD_TESTS OFF)
-set(GLFW_BUILD_DOCS OFF)
-set(GLFW_INSTALL OFF)
-add_subdirectory("${VTM_EXTERNAL_DIR}/glfw" EXCLUDE_FROM_ALL)
-set_target_properties(glfw update_mappings PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/glfw")
+set(SDL2_DISABLE_UNINSTALL ON)
+set(SDL2_DISABLE_SDL2MAIN ON)
+set(SDL_SHARED OFF)
+set(SDL_TEST OFF)
+set(SDL_TESTS OFF)
+set(SDL_TEST_ENABLED_BY_DEFAULT OFF)
+# subsystems
+set(SDL_AUDIO OFF)
+# set(SDL_VIDEO OFF)
+set(SDL_RENDER OFF)
+set(SDL_HAPTIC OFF)
+set(SDL_JOYSTICK OFF)
+set(SDL_HIDAPI OFF)
+add_subdirectory("${VTM_EXTERNAL_DIR}/sdl")
+target_compile_definitions(SDL2-static PUBLIC SDL_MAIN_HANDLED)
+set_target_properties(sdl_headers_copy SDL2-static PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/sdl")
 
 #================================#
 # Main Target                    #
 #================================#
 add_executable(${PROJECT_NAME} src/main.cpp src/shaders.h)
-target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
-add_dependencies(${PROJECT_NAME} glfw)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL2-static)
+add_dependencies(${PROJECT_NAME} SDL2-static)
 
 if(APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)

@@ -1,6 +1,5 @@
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
 #include <optional>
 #include <algorithm>
 #include <bitset>
@@ -235,10 +234,8 @@ struct Shader : Resource
 
 int main(int /*argc*/, char** /*argv*/)
 {
-    if (!glfwInit()) exitWithError("Failed to init GLFW");
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // No need to create a graphics context for Vulkan
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    GLFWwindow* window = glfwCreateWindow(target.width, target.height, "Vulkan Triangle Modern", nullptr, nullptr);
+    if (SDL_Init(0)) exitWithError("Failed to init SDL");
+    SDL_Window* window = SDL_CreateWindow("Vulkan Triangle Modern", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, target.width, target.height, 0);
 
     const vk::raii::Context context;
     // Instance Setup
@@ -269,17 +266,17 @@ int main(int /*argc*/, char** /*argv*/)
     const vk::raii::Instance instance(context, instanceCreateInfo);
 
     // Surface Setup
-    // unfortunately glfw surface creation does not work with the vulkan c++20 module
+    SDL_SysWMinfo wmInfo;
+    SDL_VERSION(&wmInfo.version);
+    SDL_GetWindowWMInfo(window, &wmInfo);
 #ifdef VK_USE_PLATFORM_WIN32_KHR
-    vk::raii::SurfaceKHR surfaceKHR { instance, vk::Win32SurfaceCreateInfoKHR{ {}, GetModuleHandle(nullptr), glfwGetWin32Window(window) } };
+    vk::raii::SurfaceKHR surfaceKHR { instance, vk::Win32SurfaceCreateInfoKHR{ {}, GetModuleHandle(nullptr), wmInfo.info.win.window } };
 #elif VK_USE_PLATFORM_XLIB_KHR
-    vk::raii::SurfaceKHR surfaceKHR { instance, vk::XlibSurfaceCreateInfoKHR{ {}, glfwGetX11Display(), glfwGetX11Window(window) } };
+    //vk::raii::SurfaceKHR surfaceKHR { instance, vk::XlibSurfaceCreateInfoKHR{ {}, glfwGetX11Display(), glfwGetX11Window(window) } };
 #elif VK_USE_PLATFORM_WAYLAND_KHR
-    vk::raii::SurfaceKHR surfaceKHR { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, glfwGetWaylandDisplay(), glfwGetWaylandWindow(window) } };
+    //vk::raii::SurfaceKHR surfaceKHR { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, glfwGetWaylandDisplay(), glfwGetWaylandWindow(window) } };
 #elif VK_USE_PLATFORM_METAL_EXT
-    VkSurfaceKHR _surface;
-    glfwCreateWindowSurface(*instance, window, nullptr, &_surface);
-    vk::raii::SurfaceKHR surfaceKHR { instance, _surface };
+    vk::raii::SurfaceKHR surfaceKHR{ instance, vk::MetalSurfaceCreateInfoEXT{ {}, SDL_Metal_GetLayer(SDL_Metal_CreateView(window)) }};
 #endif
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
@@ -292,7 +289,6 @@ int main(int /*argc*/, char** /*argv*/)
     // * check extensions
     std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::KHRDynamicRenderingExtensionName, vk::KHRSynchronization2ExtensionName, vk::EXTSwapchainMaintenance1ExtensionName };
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
-
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
     auto vulkan11Features = vk::PhysicalDeviceVulkan11Features{}.setVariablePointers(true).setVariablePointersStorageBuffer(true);
@@ -328,10 +324,15 @@ int main(int /*argc*/, char** /*argv*/)
     imageMemoryBarrier.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
     vk::DependencyInfo dependencyInfo = vk::DependencyInfo{}.setImageMemoryBarriers(imageMemoryBarrier);
 
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-        if (glfwGetWindowAttrib(window, GLFW_ICONIFIED)) continue;
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) glfwSetWindowShouldClose(window, GLFW_TRUE);
+    bool running = true;
+    while (running) {
+        SDL_Event windowEvent;
+        while (SDL_PollEvent(&windowEvent)) {
+            if (windowEvent.type == SDL_QUIT) {
+                running = false;
+                break;
+            }
+        }
         swapchain.acquireNextImage();
         const auto& cFrame = swapchain.getCurrentFrame();
         const auto& cmdBuffer = cFrame.commandBuffer;
@@ -379,7 +380,7 @@ int main(int /*argc*/, char** /*argv*/)
         swapchain.submitImage(device->queue[queueFamilyIndex.value()][0]);
     }
     device->waitIdle();
-    glfwDestroyWindow(window);
-    glfwTerminate();
+    SDL_DestroyWindow(window);
+    SDL_Quit();
     return 0;
 }
