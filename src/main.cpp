@@ -171,7 +171,7 @@ struct Swapchain : Resource
     void acquireNextImage() {
         auto& frame = acquireNewFrame();
         auto [result, idx] = swapchainKHR.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore);
-        vk::detail::resultCheck(result, "acquiring next image error");
+        if(result != vk::Result::eSuccess) exitWithError("acquiring next image error");
         currentImageIdx = idx;
         /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */
         if(not *views[currentImageIdx]) {
@@ -189,7 +189,7 @@ struct Swapchain : Resource
         presentQueue.submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, 
             waitDstStageMask, *frame.commandBuffer, *frame.renderFinishedSemaphore });
         vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
-        vk::detail::resultCheck(presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx, {}, &presentFenceInfo }), "present swapchain image error");
+        if(presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx, {}, &presentFenceInfo }) != vk::Result::eSuccess) exitWithError("present swapchain image error");
     }
 
     Frame& getCurrentFrame() { return frames.back(); }
@@ -272,9 +272,9 @@ int main(int /*argc*/, char** /*argv*/)
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     vk::raii::SurfaceKHR surfaceKHR { instance, vk::Win32SurfaceCreateInfoKHR{ {}, GetModuleHandle(nullptr), wmInfo.info.win.window } };
 #elif VK_USE_PLATFORM_XLIB_KHR
-    //vk::raii::SurfaceKHR surfaceKHR { instance, vk::XlibSurfaceCreateInfoKHR{ {}, wmInfo.info.x11.display, wmInfo.info.x11.window } };
+    vk::raii::SurfaceKHR surfaceKHR { instance, vk::XlibSurfaceCreateInfoKHR{ {}, wmInfo.info.x11.display, wmInfo.info.x11.window } };
 #elif VK_USE_PLATFORM_WAYLAND_KHR
-    //vk::raii::SurfaceKHR surfaceKHR { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, wmInfo.info.wl.display, wmInfo.info.wl.surface } };
+    vk::raii::SurfaceKHR surfaceKHR { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, wmInfo.info.wl.display, wmInfo.info.wl.surface } };
 #elif VK_USE_PLATFORM_METAL_EXT
     vk::raii::SurfaceKHR surfaceKHR{ instance, vk::MetalSurfaceCreateInfoEXT{ {}, SDL_Metal_GetLayer(SDL_Metal_CreateView(window)) }};
 #endif
