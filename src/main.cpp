@@ -1,6 +1,9 @@
+#ifdef __APPLE__
+#include <vulkan/vulkan_raii.hpp>
+constexpr bool isApple = true;
+#endif
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
-
 #include <optional>
 #include <algorithm>
 #include <bitset>
@@ -10,11 +13,7 @@
 #include <deque>
 #include <cstring>
 #include "shaders.h"
-
-#ifdef __APPLE__
-#include <vulkan/vulkan_raii.hpp>
-constexpr bool isApple = true;
-#else
+#ifndef __APPLE__
 import vulkan_hpp; // modules should come after all includes
 constexpr bool isApple = false;
 #endif
