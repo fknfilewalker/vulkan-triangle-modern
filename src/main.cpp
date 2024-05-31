@@ -1,10 +1,3 @@
-#ifdef __APPLE__
-#include <vulkan/vulkan_raii.hpp>
-constexpr bool isApple = true;
-#else
-import vulkan_hpp;
-constexpr bool isApple = false;
-#endif
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
@@ -15,6 +8,16 @@ constexpr bool isApple = false;
 #include <unordered_map>
 #include <memory>
 #include <deque>
+#include <cstring>
+#include "shaders.h"
+
+#ifdef __APPLE__
+#include <vulkan/vulkan_raii.hpp>
+constexpr bool isApple = true;
+#else
+import vulkan_hpp; // modules should come after all includes
+constexpr bool isApple = false;
+#endif
 
 constexpr struct { uint32_t width, height; } target { 800u, 600u }; // our window
 [[maybe_unused]] constexpr std::string_view shaders = R"(
@@ -31,8 +34,6 @@ float4 fragmentMain() : SV_Target
 {
     return float4(1.0, 0.0, 0.0, 1.0);
 })";
-
-#include "shaders.h"
 
 [[noreturn]] void exitWithError(const std::string_view error) {
     std::printf("%s\n", error.data());
@@ -171,7 +172,7 @@ struct Swapchain : Resource
     void acquireNextImage() {
         auto& frame = acquireNewFrame();
         auto [result, idx] = swapchainKHR.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore);
-        vk::detail::resultCheck(result, "acquiring next image error");
+        resultCheck(result, "acquiring next image error");
         currentImageIdx = idx;
         /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */
         if(not *views[currentImageIdx]) {
@@ -189,7 +190,7 @@ struct Swapchain : Resource
         presentQueue.submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, 
             waitDstStageMask, *frame.commandBuffer, *frame.renderFinishedSemaphore });
         vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
-        vk::detail::resultCheck(presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx, {}, &presentFenceInfo }), "present swapchain image error");
+        resultCheck(presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx, {}, &presentFenceInfo }), "present swapchain image error");
     }
 
     Frame& getCurrentFrame() { return frames.back(); }
@@ -242,9 +243,13 @@ int main(int /*argc*/, char** /*argv*/)
     const vk::raii::Context context;
     // Instance Setup
     std::vector iExtensions{ vk::KHRSurfaceExtensionName, vk::EXTSurfaceMaintenance1ExtensionName, vk::KHRGetSurfaceCapabilities2ExtensionName };
-#ifdef _WIN32
+#ifdef VK_USE_PLATFORM_WIN32_KHR
     iExtensions.emplace_back(vk::KHRWin32SurfaceExtensionName);
-#elif __APPLE__
+#elif VK_USE_PLATFORM_XLIB_KHR
+    iExtensions.emplace_back(vk::KHRXlibSurfaceExtensionName);
+#elif VK_USE_PLATFORM_WAYLAND_KHR
+    iExtensions.emplace_back(vk::KHRWaylandSurfaceExtensionName);
+#elif VK_USE_PLATFORM_METAL_EXT
     iExtensions.emplace_back(vk::EXTMetalSurfaceExtensionName);
 #endif
     if constexpr (isApple) iExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
@@ -265,9 +270,13 @@ int main(int /*argc*/, char** /*argv*/)
 
     // Surface Setup
     // unfortunately glfw surface creation does not work with the vulkan c++20 module
-#ifdef _WIN32
+#ifdef VK_USE_PLATFORM_WIN32_KHR
     vk::raii::SurfaceKHR surfaceKHR { instance, vk::Win32SurfaceCreateInfoKHR{ {}, GetModuleHandle(nullptr), glfwGetWin32Window(window) } };
-#elif __APPLE__
+#elif VK_USE_PLATFORM_XLIB_KHR
+    vk::raii::SurfaceKHR surfaceKHR { instance, vk::XlibSurfaceCreateInfoKHR{ {}, glfwGetX11Display(), glfwGetX11Window(window) } };
+#elif VK_USE_PLATFORM_WAYLAND_KHR
+    vk::raii::SurfaceKHR surfaceKHR { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, glfwGetWaylandDisplay(), glfwGetWaylandWindow(window) } };
+#elif VK_USE_PLATFORM_METAL_EXT
     VkSurfaceKHR _surface;
     glfwCreateWindowSurface(*instance, window, nullptr, &_surface);
     vk::raii::SurfaceKHR surfaceKHR { instance, _surface };
@@ -351,15 +360,15 @@ int main(int /*argc*/, char** /*argv*/)
             cmdBuffer.setViewportWithCountEXT({ { 0, 0, static_cast<float>(swapchain.extent.width), static_cast<float>(swapchain.extent.height) } });
             cmdBuffer.setScissorWithCountEXT({ { { 0, 0 }, swapchain.extent } });
             cmdBuffer.setVertexInputEXT({}, {});
-            cmdBuffer.setColorBlendEnableEXT(0, vk::False);
-            cmdBuffer.setDepthTestEnableEXT(vk::False);
-            cmdBuffer.setDepthWriteEnableEXT(vk::False);
-            cmdBuffer.setDepthBiasEnableEXT(vk::False);
-            cmdBuffer.setStencilTestEnableEXT(vk::False);
-            cmdBuffer.setRasterizerDiscardEnableEXT(vk::False);
+            cmdBuffer.setColorBlendEnableEXT(0, false);
+            cmdBuffer.setDepthTestEnableEXT(false);
+            cmdBuffer.setDepthWriteEnableEXT(false);
+            cmdBuffer.setDepthBiasEnableEXT(false);
+            cmdBuffer.setStencilTestEnableEXT(false);
+            cmdBuffer.setRasterizerDiscardEnableEXT(false);
             cmdBuffer.setColorBlendEquationEXT(0, vk::ColorBlendEquationEXT{}.setSrcColorBlendFactor(vk::BlendFactor::eOne));
-            cmdBuffer.setAlphaToCoverageEnableEXT(vk::False);
-            cmdBuffer.setPrimitiveRestartEnableEXT(vk::False);
+            cmdBuffer.setAlphaToCoverageEnableEXT(false);
+            cmdBuffer.setPrimitiveRestartEnableEXT(false);
             cmdBuffer.draw(3, 1, 0, 0);
         }
         cmdBuffer.endRendering();

@@ -20,7 +20,7 @@ release:
 install: debug release
 
 ninja-install:
-	cmake -H. -B${PROJECT_DIR} -G "Ninja Multi-Config"
+	cmake -H. -B${PROJECT_DIR} -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} -G "Ninja Multi-Config"
 	cmake --build ${PROJECT_DIR} --parallel 8 --target install --config Debug 
 	cmake --build ${PROJECT_DIR} --parallel 8 --target install --config Release
 

@@ -43,6 +43,12 @@ if(WIN32)
     )
 elseif(APPLE)
 elseif(UNIX)
+    target_compile_definitions(VulkanCppModule PUBLIC
+        VK_USE_PLATFORM_XLIB_KHR
+        GLFW_EXPOSE_NATIVE_X11
+        # VK_USE_PLATFORM_WAYLAND_KHR
+        # GLFW_EXPOSE_NATIVE_WAYLAND
+    )
 endif()
 
 set(GLFW_BUILD_EXAMPLES OFF)
