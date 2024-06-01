@@ -2,21 +2,18 @@ cmake_minimum_required(VERSION 3.28)
 project(vulkan-triangle-modern)
 
 #================================#
-# Dependencies                   #
+# Config                         #
 #================================#
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
 set(VTM_EXTERNAL_FOLDER "Dependencies")
 set(VTM_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(VTM_EXTERNAL_DIR "${VTM_SOURCE_DIR}/external")
-
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 #================================#
 # Dependencies                   #
 #================================#
-
 # set up vulkan C++ module target
 add_library(VulkanCppModule)
 target_sources(VulkanCppModule PUBLIC FILE_SET CXX_MODULES
@@ -33,8 +30,7 @@ set_target_properties(VulkanCppModule PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/
 
 if(WIN32)
     target_compile_definitions(VulkanCppModule PUBLIC 
-        VK_USE_PLATFORM_WIN32_KHR
-        GLFW_EXPOSE_NATIVE_WIN32
+        VK_USE_PLATFORM_WIN32_KHR GLFW_EXPOSE_NATIVE_WIN32
         NOMINMAX
     )
 elseif(APPLE)
@@ -44,10 +40,8 @@ elseif(APPLE)
     target_link_libraries(VulkanCppModule PUBLIC Vulkan::Vulkan)
 elseif(UNIX)
     target_compile_definitions(VulkanCppModule PUBLIC
-        VK_USE_PLATFORM_XLIB_KHR
-        GLFW_EXPOSE_NATIVE_X11
-        # VK_USE_PLATFORM_WAYLAND_KHR
-        # GLFW_EXPOSE_NATIVE_WAYLAND
+        VK_USE_PLATFORM_XLIB_KHR GLFW_EXPOSE_NATIVE_X11
+        # VK_USE_PLATFORM_WAYLAND_KHR GLFW_EXPOSE_NATIVE_WAYLAND
     )
 endif()
 
