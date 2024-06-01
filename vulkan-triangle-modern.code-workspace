@@ -24,7 +24,8 @@
 			"stack": "cpp",
 			"string": "cpp",
 			"unordered_map": "cpp",
-			"__config": "cpp"
+			"__config": "cpp",
+			"list": "cpp"
 		}
 	}
 }

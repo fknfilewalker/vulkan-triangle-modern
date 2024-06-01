@@ -17,9 +17,7 @@ release:
 	cmake -H. -B${PROJECT_DIR} -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
 	cmake --build ${PROJECT_DIR} --parallel 8 --target install
 
-install: debug release
-
-ninja-install:
+install:
 	cmake -H. -B${PROJECT_DIR} -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} -G "Ninja Multi-Config"
 	cmake --build ${PROJECT_DIR} --parallel 8 --target install --config Debug 
 	cmake --build ${PROJECT_DIR} --parallel 8 --target install --config Release

@@ -1,7 +1,3 @@
-#ifdef __APPLE__
-#include <vulkan/vulkan_raii.hpp>
-constexpr bool isApple = true;
-#endif
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 #include <optional>
@@ -13,8 +9,11 @@ constexpr bool isApple = true;
 #include <deque>
 #include <cstring>
 #include "shaders.h"
-#ifndef __APPLE__
 import vulkan_hpp; // modules should come after all includes
+
+#ifdef __APPLE__
+constexpr bool isApple = true;
+#else
 constexpr bool isApple = false;
 #endif
 
@@ -250,8 +249,8 @@ int main(int /*argc*/, char** /*argv*/)
     iExtensions.emplace_back(vk::KHRWaylandSurfaceExtensionName);
 #elif VK_USE_PLATFORM_METAL_EXT
     iExtensions.emplace_back(vk::EXTMetalSurfaceExtensionName);
+    iExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
 #endif
-    if constexpr (isApple) iExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
 
     std::vector iLayers = { "VK_LAYER_LUNARG_monitor" };
 #if !defined( NDEBUG )
@@ -276,9 +275,7 @@ int main(int /*argc*/, char** /*argv*/)
 #elif VK_USE_PLATFORM_WAYLAND_KHR
     vk::raii::SurfaceKHR surfaceKHR { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, glfwGetWaylandDisplay(), glfwGetWaylandWindow(window) } };
 #elif VK_USE_PLATFORM_METAL_EXT
-    VkSurfaceKHR _surface;
-    glfwCreateWindowSurface(*instance, window, nullptr, &_surface);
-    vk::raii::SurfaceKHR surfaceKHR { instance, _surface };
+    exitWithError("Metal surface not implemented");
 #endif
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
@@ -318,7 +315,7 @@ int main(int /*argc*/, char** /*argv*/)
 
     // Shader object setup : https://github.com/KhronosGroup/Vulkan-Docs/blob/main/proposals/VK_EXT_shader_object.adoc
     constexpr vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
-    Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, vert_spv, "main" }, { vk::ShaderStageFlagBits::eFragment, frag_spv, "main" } }, { pcRange } };
+    Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, shaders_spv, "vertexMain" }, { vk::ShaderStageFlagBits::eFragment, shaders_spv, "fragmentMain" } }, { pcRange } };
 
     // Swapchain setup
     Swapchain swapchain{ device, surfaceKHR, queueFamilyIndex.value() };

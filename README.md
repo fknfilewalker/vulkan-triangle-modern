@@ -19,7 +19,6 @@ Use CMake for project configuration. The included `make.bat` script can be used 
 > Please clone this repository with submodule!
 
 ### Notes
-* `VK_EXT_swapchain_maintenance1` still not well supported (so check) and has some validation bugs (the semaphore validation error should go away with the next SDK update)
+* `VK_EXT_swapchain_maintenance1` still not well supported and has some validation bugs (the semaphore validation error should go away with the next SDK update)
 * Linux should work (LLVM Version >= 18.0.0 + Ninja build Version >= 1.11 requiered)
-* Slang for now produces bad spv on macOS
-* Code will become shorter once I replace the macos fallback to just c++ modules
+* Slang produces bad spv on macOS therefore macOS not supported for now
