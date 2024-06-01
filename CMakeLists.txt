@@ -16,24 +16,20 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 #================================#
 # Dependencies                   #
 #================================#
-if(APPLE)
-    # for moltenvk
-    find_package(Vulkan REQUIRED)
-else()
-    # set up vulkan C++ module target
-    add_library(VulkanCppModule)
-    target_sources(VulkanCppModule PUBLIC FILE_SET CXX_MODULES
-        FILES "${VTM_EXTERNAL_DIR}/vulkan-headers/include/vulkan/vulkan.cppm"
-    )
-    target_include_directories(VulkanCppModule PUBLIC "${VTM_EXTERNAL_DIR}/vulkan-headers/include")
-    target_compile_definitions(VulkanCppModule PUBLIC 
-        VULKAN_HPP_NO_SMART_HANDLE
-        VULKAN_HPP_NO_SPACESHIP_OPERATOR
-        VULKAN_HPP_NO_TO_STRING
-        VK_NO_PROTOTYPES
-    )
-    set_target_properties(VulkanCppModule PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/vulkan")
-endif()
+
+# set up vulkan C++ module target
+add_library(VulkanCppModule)
+target_sources(VulkanCppModule PUBLIC FILE_SET CXX_MODULES
+    FILES "${VTM_EXTERNAL_DIR}/vulkan-headers/include/vulkan/vulkan.cppm"
+)
+target_include_directories(VulkanCppModule PUBLIC "${VTM_EXTERNAL_DIR}/vulkan-headers/include")
+target_compile_definitions(VulkanCppModule PUBLIC 
+    VULKAN_HPP_NO_SMART_HANDLE
+    VULKAN_HPP_NO_SPACESHIP_OPERATOR
+    VULKAN_HPP_NO_TO_STRING
+    VK_NO_PROTOTYPES
+)
+set_target_properties(VulkanCppModule PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/vulkan")
 
 if(WIN32)
     target_compile_definitions(VulkanCppModule PUBLIC 
@@ -41,6 +37,12 @@ if(WIN32)
         NOMINMAX
     )
 elseif(APPLE)
+    # for moltenvk
+    find_package(Vulkan REQUIRED)
+    target_compile_definitions(VulkanCppModule PUBLIC
+        VK_USE_PLATFORM_METAL_EXT
+    )
+    target_link_libraries(VulkanCppModule PUBLIC Vulkan::Vulkan)
 elseif(UNIX)
     target_compile_definitions(VulkanCppModule PUBLIC
         VK_USE_PLATFORM_XLIB_KHR
@@ -72,24 +74,8 @@ set_target_properties(SDL3-static PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/sdl"
 # Main Target                    #
 #================================#
 add_executable(${PROJECT_NAME} src/main.cpp src/shaders.h)
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL3-static)
-add_dependencies(${PROJECT_NAME} SDL3-static)
-
-if(APPLE)
-    target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
-    target_include_directories(${PROJECT_NAME} PRIVATE "${VTM_EXTERNAL_DIR}/vulkan-headers/include")
-
-    target_compile_definitions(${PROJECT_NAME} PUBLIC
-        VK_USE_PLATFORM_METAL_EXT
-        VULKAN_HPP_NO_SMART_HANDLE
-        VULKAN_HPP_NO_SPACESHIP_OPERATOR
-        VULKAN_HPP_NO_TO_STRING
-        VK_NO_PROTOTYPES
-    )
-else()
-    target_link_libraries(${PROJECT_NAME} PRIVATE VulkanCppModule)
-    add_dependencies(${PROJECT_NAME} VulkanCppModule)
-endif()
+target_link_libraries(${PROJECT_NAME} PRIVATE VulkanCppModule SDL3-static)
+add_dependencies(${PROJECT_NAME} VulkanCppModule SDL3-static)
 
 install(TARGETS ${PROJECT_NAME} CONFIGURATIONS Debug DESTINATION "debug")
 install(TARGETS ${PROJECT_NAME} CONFIGURATIONS Release DESTINATION "release")
