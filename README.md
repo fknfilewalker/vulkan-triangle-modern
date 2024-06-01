@@ -20,5 +20,5 @@ Use CMake for project configuration. The included `make.bat` script can be used 
 
 ### Notes
 * `VK_EXT_swapchain_maintenance1` still not well supported and has some validation bugs (the semaphore validation error should go away with the next SDK update)
-* Linux should work (LLVM Version >= 18.0.0 + Ninja build Version >= 1.11 requiered)
+* Linux should work (LLVM Version >= 18.0.0 + Ninja build Version >= 1.11 required)
 * Slang produces bad spv on macOS therefore macOS not supported for now
