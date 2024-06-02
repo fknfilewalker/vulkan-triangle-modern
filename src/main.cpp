@@ -261,7 +261,7 @@ int main(int /*argc*/, char** /*argv*/)
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) exitWithError("Instance layers not available");
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
 
-    constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion12 };
+    constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion13 };
     vk::InstanceCreateInfo instanceCreateInfo{ {}, &applicationInfo, iLayers, iExtensions };
     if constexpr (isApple) instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
     const vk::raii::Instance instance(context, instanceCreateInfo);
@@ -279,14 +279,14 @@ int main(int /*argc*/, char** /*argv*/)
 #endif
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
-    const vk::raii::PhysicalDevice& physicalDevice{ physicalDevices[0] };
+    const vk::raii::PhysicalDevice& physicalDevice{ physicalDevices[1] };
     // * find queue
     const auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surfaceKHR)) exitWithError("Queue family does not support presentation");
     // * check extensions
-    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::KHRDynamicRenderingExtensionName, vk::KHRSynchronization2ExtensionName, vk::EXTSwapchainMaintenance1ExtensionName };
+    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::EXTSwapchainMaintenance1ExtensionName };
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
