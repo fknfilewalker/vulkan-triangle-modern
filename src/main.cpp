@@ -208,7 +208,7 @@ struct Swapchain : Resource
 struct Shader : Resource
 {
     struct Stage {
-        Stage(const vk::ShaderStageFlagBits stage, const std::reference_wrapper<const std::vector<uint32_t>> spv, const std::string& entry = "main") : stage{ stage }, spv{ spv }, entry{ entry } {}
+        Stage(const vk::ShaderStageFlagBits stage, const std::reference_wrapper<const std::vector<uint32_t>> spv, std::string entry = "main") : stage{ stage }, spv{ spv }, entry{std::move(entry)} {}
 		vk::ShaderStageFlagBits stage; std::reference_wrapper<const std::vector<uint32_t>> spv; std::string entry;
 	};
     Shader(const std::shared_ptr<Device>& device, const std::vector<Stage>& shaderStages, const std::vector<vk::PushConstantRange>& pcRanges) : Resource{ device },
@@ -279,7 +279,7 @@ int main(int /*argc*/, char** /*argv*/)
 #endif
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
-    const vk::raii::PhysicalDevice& physicalDevice{ physicalDevices[1] };
+    const vk::raii::PhysicalDevice& physicalDevice{ physicalDevices[0] };
     // * find queue
     const auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
