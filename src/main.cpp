@@ -11,11 +11,12 @@
 #include <deque>
 #include <cstring>
 #include "shaders.h"
-import vulkan_hpp; // modules should come after all includes
 
 #ifdef __APPLE__
+#include <vulkan/vulkan_raii.hpp>
 constexpr bool isApple = true;
 #else
+import vulkan_hpp; // modules should come after all includes
 constexpr bool isApple = false;
 #endif
 
