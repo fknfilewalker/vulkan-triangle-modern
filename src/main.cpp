@@ -269,13 +269,13 @@ int main(int /*argc*/, char** /*argv*/)
 
     // Surface Setup
 #ifdef VK_USE_PLATFORM_WIN32_KHR
-    vk::raii::SurfaceKHR surfaceKHR { instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, (HWND)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) } };
+    vk::raii::SurfaceKHR surface { instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, (HWND)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) } };
 #elif VK_USE_PLATFORM_XLIB_KHR
-    vk::raii::SurfaceKHR surfaceKHR { instance, vk::XlibSurfaceCreateInfoKHR{ {}, wmInfo.info.x11.display, wmInfo.info.x11.window } };
+    vk::raii::SurfaceKHR surface { instance, vk::XlibSurfaceCreateInfoKHR{ {}, wmInfo.info.x11.display, wmInfo.info.x11.window } };
 #elif VK_USE_PLATFORM_WAYLAND_KHR
-    vk::raii::SurfaceKHR surfaceKHR { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, wmInfo.info.wl.display, wmInfo.info.wl.surface } };
+    vk::raii::SurfaceKHR surface { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, wmInfo.info.wl.display, wmInfo.info.wl.surface } };
 #elif VK_USE_PLATFORM_METAL_EXT
-    vk::raii::SurfaceKHR surfaceKHR{ instance, vk::MetalSurfaceCreateInfoEXT{ {}, SDL_Metal_GetLayer(SDL_Metal_CreateView(window)) }};
+    vk::raii::SurfaceKHR surface{ instance, vk::MetalSurfaceCreateInfoEXT{ {}, SDL_Metal_GetLayer(SDL_Metal_CreateView(window)) }};
 #endif
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
@@ -284,7 +284,7 @@ int main(int /*argc*/, char** /*argv*/)
     const auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
-    if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surfaceKHR)) exitWithError("Queue family does not support presentation");
+    if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surface)) exitWithError("Queue family does not support presentation");
     // * check extensions
     std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::KHRDynamicRenderingExtensionName, vk::KHRSynchronization2ExtensionName, vk::EXTSwapchainMaintenance1ExtensionName };
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
@@ -303,9 +303,9 @@ int main(int /*argc*/, char** /*argv*/)
 
     // Vertex buffer setup (triangle is upside down on purpose)
     const std::vector vertices = {
-        -0.5f, -0.5f, 0.0f,
-         0.5f, -0.5f, 0.0f,
-         0.0f,  0.5f, 0.0f
+        -0.5f, -0.5f, 0.0f, 1.0f,
+         0.5f, -0.5f, 0.0f, 1.0f,
+         0.0f,  0.5f, 0.0f, 1.0f
     };
     const size_t verticesSize = vertices.size() * sizeof(float);
     const Buffer buffer{ device, verticesSize, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible }; /* reBAR */
@@ -318,7 +318,7 @@ int main(int /*argc*/, char** /*argv*/)
     Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, shaders_spv, "vertexMain" }, { vk::ShaderStageFlagBits::eFragment, shaders_spv, "fragmentMain" } }, { pcRange } };
 
     // Swapchain setup
-    Swapchain swapchain{ device, surfaceKHR, queueFamilyIndex.value() };
+    Swapchain swapchain{ device, surface, queueFamilyIndex.value() };
     vk::ImageMemoryBarrier2 imageMemoryBarrier {};
     imageMemoryBarrier.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
     vk::DependencyInfo dependencyInfo = vk::DependencyInfo{}.setImageMemoryBarriers(imageMemoryBarrier);
