@@ -323,15 +323,16 @@ int main(int /*argc*/, char** /*argv*/)
     imageMemoryBarrier.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
     vk::DependencyInfo dependencyInfo = vk::DependencyInfo{}.setImageMemoryBarriers(imageMemoryBarrier);
 
-    bool running = true;
+    bool running = true, minimized = false;
     while (running) {
         SDL_Event windowEvent;
         while (SDL_PollEvent(&windowEvent)) {
-            if (windowEvent.type == SDL_EVENT_QUIT) {
-                running = false;
-                break;
-            }
+            if (windowEvent.type == SDL_EVENT_QUIT) { running = false; break; }
+            if (windowEvent.type == SDL_EVENT_WINDOW_MINIMIZED) { minimized = true; break; }
+            if (windowEvent.type == SDL_EVENT_WINDOW_RESTORED) { minimized = false; break; }
         }
+        if (minimized) continue;
+        
         swapchain.acquireNextImage();
         const auto& cFrame = swapchain.getCurrentFrame();
         const auto& cmdBuffer = cFrame.commandBuffer;
