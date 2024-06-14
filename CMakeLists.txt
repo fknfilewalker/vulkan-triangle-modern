@@ -44,7 +44,7 @@ elseif(APPLE)
 elseif(UNIX)
     target_compile_definitions(VulkanCppModule PUBLIC
         VK_USE_PLATFORM_XLIB_KHR
-        # VK_USE_PLATFORM_WAYLAND_KHR
+        VK_USE_PLATFORM_WAYLAND_KHR
     )
 endif()
 

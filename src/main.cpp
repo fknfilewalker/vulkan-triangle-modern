@@ -1,6 +1,9 @@
 #include <SDL3/SDL.h>
 #ifdef _WIN32
 #include <Windows.h>
+#elif defined(__linux__)
+#include <X11/Xlib.h>
+#include <wayland-client.h>
 #endif
 #include <optional>
 #include <algorithm>
@@ -174,9 +177,9 @@ struct Swapchain : Resource
 
     void acquireNextImage() {
         auto& frame = acquireNewFrame();
-        auto pair = swapchain.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore);
-        if (pair.first != vk::Result::eSuccess) exitWithError("Failed to acquire next image");
-        currentImageIdx = pair.second;
+        try { 
+            currentImageIdx = swapchain.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore).second;
+        } catch (const vk::OutOfDateKHRError&) { createSwapchain(); acquireNextImage(); return; } // unix
         /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */
         if(not *views[currentImageIdx]) {
         	views[currentImageIdx] = vk::raii::ImageView{ *dev, vk::ImageViewCreateInfo{ {}, images[currentImageIdx], vk::ImageViewType::e2D,
@@ -194,7 +197,7 @@ struct Swapchain : Resource
             waitDstStageMask, *frame.commandBuffer, *frame.renderFinishedSemaphore });
         vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
         try { auto _ = presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchain, currentImageIdx, {}, &presentFenceInfo }); }
-        catch (const vk::OutOfDateKHRError&) { presentQueue.waitIdle(); frames.clear(); createSwapchain(); }
+        catch (const vk::OutOfDateKHRError&) { presentQueue.waitIdle(); frames.clear(); createSwapchain(); } // win32
     }
 
     Frame& getCurrentFrame() { return frames.back(); }
@@ -271,14 +274,21 @@ int main(int /*argc*/, char** /*argv*/)
     const vk::raii::Instance instance(context, instanceCreateInfo);
 
     // Surface Setup
+    vk::raii::SurfaceKHR surface { nullptr };
 #ifdef VK_USE_PLATFORM_WIN32_KHR
-    vk::raii::SurfaceKHR surface { instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, (HWND)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) } };
-#elif VK_USE_PLATFORM_XLIB_KHR
-    vk::raii::SurfaceKHR surface { instance, vk::XlibSurfaceCreateInfoKHR{ {}, wmInfo.info.x11.display, wmInfo.info.x11.window } };
-#elif VK_USE_PLATFORM_WAYLAND_KHR
-    vk::raii::SurfaceKHR surface { instance, vk::WaylandSurfaceCreateInfoKHR{ {}, wmInfo.info.wl.display, wmInfo.info.wl.surface } };
-#elif VK_USE_PLATFORM_METAL_EXT
-    vk::raii::SurfaceKHR surface{ instance, vk::MetalSurfaceCreateInfoEXT{ {}, SDL_Metal_GetLayer(SDL_Metal_CreateView(window)) }};
+    surface = vk::raii::SurfaceKHR{ instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, (HWND)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) } };
+#elif defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_WAYLAND_KHR)
+    if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
+        Display *xdisplay = (Display *)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
+        Window xwindow = (Window)SDL_GetNumberProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0); 
+        surface = vk::raii::SurfaceKHR{ instance, vk::XlibSurfaceCreateInfoKHR{ {}, xdisplay, xwindow } };
+    } else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
+        wl_display *wldisplay = (wl_display *)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
+        wl_surface *wlsurface = (wl_surface *)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
+        surface = vk::raii::SurfaceKHR{ instance, vk::WaylandSurfaceCreateInfoKHR{ {}, wldisplay, wlsurface } };
+    }
+#elif defined(VK_USE_PLATFORM_METAL_EXT)
+    surface = vk::raii::SurfaceKHR{ instance, vk::MetalSurfaceCreateInfoEXT{ {}, SDL_Metal_GetLayer(SDL_Metal_CreateView(window)) }};
 #endif
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
