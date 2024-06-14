@@ -144,24 +144,26 @@ struct Swapchain : Resource
     };
 
     Swapchain(const std::shared_ptr<Device>& device, const vk::raii::SurfaceKHR& surface, const uint32_t queueFamilyIndex) : Resource{ device }, currentImageIdx{ 0 }, previousImageIdx{ 0 },
-		swapchainKHR{ nullptr }, commandPool{ *dev, { vk::CommandPoolCreateFlagBits::eTransient, queueFamilyIndex } }
+        swapchain{ nullptr }, commandPool{ *dev, { vk::CommandPoolCreateFlagBits::eTransient, queueFamilyIndex } }
     {
         const auto surfaceCapabilities = dev->physicalDevice.getSurfaceCapabilitiesKHR(*surface);
         const auto surfaceFormats = dev->physicalDevice.getSurfaceFormatsKHR(*surface);
 
         imageCount = std::max(3u, surfaceCapabilities.minImageCount);
         if (surfaceCapabilities.maxImageCount) imageCount = std::min(imageCount, surfaceCapabilities.maxImageCount);
-        currentImageIdx = imageCount - 1u; // for init
-        extent = surfaceCapabilities.currentExtent; format = surfaceFormats[0].format;
-        vk::SwapchainCreateInfoKHR swapchainCreateInfoKHR{ { vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT },
-    		*surface, imageCount, format, surfaceFormats[0].colorSpace,
-    		extent,1u, vk::ImageUsageFlagBits::eColorAttachment };
-        swapchainCreateInfoKHR.setPresentMode(vk::PresentModeKHR::eFifo);
-        swapchainKHR = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfoKHR };
+        swapchainCreateInfo = vk::SwapchainCreateInfoKHR{ { vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT },
+    		*surface, imageCount, surfaceFormats[0].format, surfaceFormats[0].colorSpace, surfaceCapabilities.currentExtent,
+        	1u, vk::ImageUsageFlagBits::eColorAttachment }.setPresentMode(vk::PresentModeKHR::eFifo);
+        createSwapchain();
+    }
 
-        images = swapchainKHR.getImages();
-        views.reserve(images.size());
-        for (const auto& image : images) views.emplace_back(nullptr);
+    void createSwapchain() {
+        const auto surfaceCapabilities = dev->physicalDevice.getSurfaceCapabilitiesKHR(swapchainCreateInfo.surface);
+        swapchainCreateInfo.imageExtent = surfaceCapabilities.currentExtent;
+        swapchainCreateInfo.oldSwapchain = *swapchain;
+        swapchain = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfo };
+        images = swapchain.getImages();
+        views.clear(); for (const auto& image : images) views.emplace_back(nullptr);
     }
 
     Frame& acquireNewFrame() {
@@ -172,13 +174,13 @@ struct Swapchain : Resource
 
     void acquireNextImage() {
         auto& frame = acquireNewFrame();
-        auto [result, idx] = swapchainKHR.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore);
-        if(result != vk::Result::eSuccess) exitWithError("acquiring next image error");
-        currentImageIdx = idx;
+        auto pair = swapchain.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore);
+        if (pair.first != vk::Result::eSuccess) exitWithError("Failed to acquire next image");
+        currentImageIdx = pair.second;
         /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */
         if(not *views[currentImageIdx]) {
         	views[currentImageIdx] = vk::raii::ImageView{ *dev, vk::ImageViewCreateInfo{ {}, images[currentImageIdx], vk::ImageViewType::e2D,
-                format, {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
+                swapchainCreateInfo.imageFormat, {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
         }
         frame.commandBuffer.begin({});
     }
@@ -191,17 +193,18 @@ struct Swapchain : Resource
         presentQueue.submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, 
             waitDstStageMask, *frame.commandBuffer, *frame.renderFinishedSemaphore });
         vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
-        if(presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchainKHR, currentImageIdx, {}, &presentFenceInfo }) != vk::Result::eSuccess) exitWithError("present swapchain image error");
+        try { auto _ = presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchain, currentImageIdx, {}, &presentFenceInfo }); }
+        catch (const vk::OutOfDateKHRError&) { presentQueue.waitIdle(); frames.clear(); createSwapchain(); }
     }
 
     Frame& getCurrentFrame() { return frames.back(); }
     vk::Image& getCurrentImage() { return images[currentImageIdx]; }
     vk::raii::ImageView& getCurrentImageView() { return views[currentImageIdx]; }
+    [[nodiscard]] const vk::Extent2D& extent() const { return swapchainCreateInfo.imageExtent; }
 
-    vk::Extent2D extent;
-    vk::Format format;
+    vk::SwapchainCreateInfoKHR swapchainCreateInfo;
     uint32_t imageCount, currentImageIdx, previousImageIdx;
-    vk::raii::SwapchainKHR swapchainKHR;
+    vk::raii::SwapchainKHR swapchain;
     std::vector<vk::Image> images;
     std::vector<vk::raii::ImageView> views;
     vk::raii::CommandPool commandPool;
@@ -211,7 +214,7 @@ struct Swapchain : Resource
 struct Shader : Resource
 {
     struct Stage {
-        Stage(const vk::ShaderStageFlagBits stage, const std::reference_wrapper<const std::vector<uint32_t>> spv, const std::string& entry = "main") : stage{ stage }, spv{ spv }, entry{ entry } {}
+        Stage(const vk::ShaderStageFlagBits stage, const std::reference_wrapper<const std::vector<uint32_t>> spv, std::string entry = "main") : stage{ stage }, spv{ spv }, entry{std::move(entry)} {}
 		vk::ShaderStageFlagBits stage; std::reference_wrapper<const std::vector<uint32_t>> spv; std::string entry;
 	};
     Shader(const std::shared_ptr<Device>& device, const std::vector<Stage>& shaderStages, const std::vector<vk::PushConstantRange>& pcRanges) : Resource{ device },
@@ -237,7 +240,7 @@ struct Shader : Resource
 int main(int /*argc*/, char** /*argv*/)
 {
     if (SDL_Init(0)) exitWithError("Failed to init SDL");
-    SDL_Window* window = SDL_CreateWindow("Vulkan Triangle Modern", target.width, target.height, 0);
+    SDL_Window* window = SDL_CreateWindow("Vulkan Triangle Modern", target.width, target.height, SDL_WINDOW_RESIZABLE);
 
     const vk::raii::Context context;
     // Instance Setup
@@ -346,7 +349,7 @@ int main(int /*argc*/, char** /*argv*/)
         rAttachmentInfo.clearValue.color = { 0.0f, 0.0f, 0.0f, 1.0f };
         rAttachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
         rAttachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
-        cmdBuffer.beginRendering({ {}, { {}, swapchain.extent }, 1, 0, 1, &rAttachmentInfo });
+        cmdBuffer.beginRendering({ {}, { {}, swapchain.extent() }, 1, 0, 1, &rAttachmentInfo });
         {
             /* set render state for shader objects */
             cmdBuffer.bindShadersEXT(shader.stages, shader.shaders);
@@ -358,8 +361,8 @@ int main(int /*argc*/, char** /*argv*/)
             cmdBuffer.setColorWriteMaskEXT(0, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB);
             cmdBuffer.setSampleMaskEXT(vk::SampleCountFlagBits::e1, { 0xffffffff });
             cmdBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
-            cmdBuffer.setViewportWithCountEXT({ { 0, 0, static_cast<float>(swapchain.extent.width), static_cast<float>(swapchain.extent.height) } });
-            cmdBuffer.setScissorWithCountEXT({ { { 0, 0 }, swapchain.extent } });
+            cmdBuffer.setViewportWithCountEXT({ { 0, 0, static_cast<float>(swapchain.extent().width), static_cast<float>(swapchain.extent().height) } });
+            cmdBuffer.setScissorWithCountEXT({ { { 0, 0 }, swapchain.extent()}});
             cmdBuffer.setVertexInputEXT({}, {});
             cmdBuffer.setColorBlendEnableEXT(0, { false });
             cmdBuffer.setDepthTestEnableEXT(false);
