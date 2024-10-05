@@ -242,7 +242,7 @@ struct Shader : Resource
 
 int main(int /*argc*/, char** /*argv*/)
 {
-    if (SDL_Init(0)) exitWithError("Failed to init SDL");
+    if (!SDL_Init(0)) exitWithError("Failed to init SDL");
     SDL_Window* window = SDL_CreateWindow("Vulkan Triangle Modern", target.width, target.height, SDL_WINDOW_RESIZABLE);
 
     const vk::raii::Context context;
@@ -275,16 +275,18 @@ int main(int /*argc*/, char** /*argv*/)
 
     // Surface Setup
     vk::raii::SurfaceKHR surface { nullptr };
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-    surface = vk::raii::SurfaceKHR{ instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, (HWND)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) } };
+    auto windowProps = SDL_GetWindowProperties(window);
+#ifdef VK_USE_PLATFORM_WIN32_KHR)
+    surface = vk::raii::SurfaceKHR{ instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, (HWND)SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) } };
 #elif defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_WAYLAND_KHR)
     if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
-        Display *xdisplay = (Display *)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
-        Window xwindow = (Window)SDL_GetNumberProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0); 
+        Display *xdisplay = (Display *)SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
+        Window xwindow = (Window)SDL_GetNumberProperty(windowProps, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
         surface = vk::raii::SurfaceKHR{ instance, vk::XlibSurfaceCreateInfoKHR{ {}, xdisplay, xwindow } };
-    } else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
-        wl_display *wldisplay = (wl_display *)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
-        wl_surface *wlsurface = (wl_surface *)SDL_GetProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
+    }
+    else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
+        wl_display* wldisplay = (wl_display*)SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
+        wl_surface* wlsurface = (wl_surface*)SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
         surface = vk::raii::SurfaceKHR{ instance, vk::WaylandSurfaceCreateInfoKHR{ {}, wldisplay, wlsurface } };
     }
 #elif defined(VK_USE_PLATFORM_METAL_EXT)
