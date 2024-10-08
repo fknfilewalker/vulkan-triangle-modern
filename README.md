@@ -20,5 +20,5 @@ Use CMake for project configuration. The included `make.bat` script can be used 
 > Please clone this repository with submodule!
 
 ### Notes
-* Linux should work (LLVM Version >= 18.0.0 + Ninja build Version >= 1.11)
-* Code will become shorter once I replace the macos fallback to just c++ modules
+* Linux should work (LLVM version >= 18.0.0 + Ninja build version >= 1.11)
+* On MacOS use a newer LLVM/Clang version from brew
