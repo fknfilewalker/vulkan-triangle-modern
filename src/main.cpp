@@ -13,7 +13,6 @@
 #include <memory>
 #include <deque>
 #include <cstring>
-
 #include "shaders.h"
 import vulkan_hpp; // modules should come after all includes
 
@@ -334,9 +333,8 @@ int main(int /*argc*/, char** /*argv*/)
 
     // Swapchain setup
     Swapchain swapchain{ device, surface, queueFamilyIndex.value() };
-    vk::ImageMemoryBarrier2 imageMemoryBarrier {};
-    imageMemoryBarrier.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
-    vk::DependencyInfo dependencyInfo = vk::DependencyInfo{}.setImageMemoryBarriers(imageMemoryBarrier);
+    auto imgMemBarrier = vk::ImageMemoryBarrier2{}.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+    vk::DependencyInfo dependencyInfo = vk::DependencyInfo{}.setImageMemoryBarriers(imgMemBarrier);
 
     bool running = true, minimized = false;
     while (running) {
@@ -352,9 +350,10 @@ int main(int /*argc*/, char** /*argv*/)
         const auto& cFrame = swapchain.getCurrentFrame();
         const auto& cmdBuffer = cFrame.commandBuffer;
 
-        imageMemoryBarrier.image = swapchain.getCurrentImage();
-        imageMemoryBarrier.oldLayout = vk::ImageLayout::eUndefined;
-        imageMemoryBarrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        imgMemBarrier.setImage(swapchain.getCurrentImage())
+            .setOldLayout(vk::ImageLayout::eUndefined).setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eAllCommands).setSrcAccessMask({})
+            .setDstStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput).setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite);
         cmdBuffer.pipelineBarrier2(dependencyInfo);
         
         vk::RenderingAttachmentInfo rAttachmentInfo{ *swapchain.getCurrentImageView(), vk::ImageLayout::eColorAttachmentOptimal};
@@ -389,8 +388,9 @@ int main(int /*argc*/, char** /*argv*/)
         }
         cmdBuffer.endRendering();
 
-        imageMemoryBarrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
-        imageMemoryBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+        imgMemBarrier.setOldLayout(vk::ImageLayout::eColorAttachmentOptimal).setNewLayout(vk::ImageLayout::ePresentSrcKHR)
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput).setSrcAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite)
+            .setDstStageMask(vk::PipelineStageFlagBits2::eNone).setDstAccessMask(vk::AccessFlagBits2::eNone);
         cmdBuffer.pipelineBarrier2(dependencyInfo);
         swapchain.submitImage(device->queue[queueFamilyIndex.value()][0]);
     }
