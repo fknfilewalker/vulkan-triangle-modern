@@ -48,13 +48,13 @@ bool extensionsOrLayersAvailable(const std::vector<T>& available, const std::vec
     static_assert(std::is_same_v<vk::LayerProperties, T> || std::is_same_v<vk::ExtensionProperties, T>);
     return std::all_of(requested.begin(), requested.end(), [&available](const char* requestedElement) {
         return std::find_if(available.begin(), available.end(), [requestedElement](const T& availableElement) {
-            if constexpr (std::is_same_v<vk::LayerProperties, T>) return std::string_view{ availableElement.layerName.data() }.compare(requestedElement) == 0;
-            else if constexpr (std::is_same_v<vk::ExtensionProperties, T>) return std::string_view{ availableElement.extensionName.data() }.compare(requestedElement) == 0;
+            if constexpr (std::is_same_v<vk::LayerProperties, T>) return std::string_view{ availableElement.layerName.data() } == requestedElement;
+            else if constexpr (std::is_same_v<vk::ExtensionProperties, T>) return std::string_view{ availableElement.extensionName.data() } == requestedElement;
         }) != available.end();
     });
 }
 
-std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyProperties>& queueFamiliesProperties, vk::QueueFlags queueFlags) {
+std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyProperties>& queueFamiliesProperties, const vk::QueueFlags queueFlags) {
     std::optional<uint32_t> bestFamily;
     std::bitset<12> bestScore = 0;
     for (uint32_t i = 0; i < queueFamiliesProperties.size(); i++) {
@@ -89,7 +89,7 @@ struct Device : vk::raii::Device
         vk::raii::Device::operator=({ physicalDevice, deviceCreateInfo });
         // get all our queues -> queue[family][index]
         for (const auto& [queueFamilyIndex, queueCount] : queues) {
-            queue.emplace_back(std::vector<vk::raii::Queue>{ queueCount, nullptr });
+            queue.emplace_back( queueCount, nullptr );
             for (uint32_t i = 0; i < queueCount; ++i) queue.back()[i] = getQueue(queueFamilyIndex, i);
         }
     }
