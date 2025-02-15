@@ -1,6 +1,6 @@
 ## The meme is dead
 
-Render a vulkan triangle in ~380 lines of [code](https://github.com/fknfilewalker/vulkan-triangle-modern/blob/main/src/main.cpp)! (~370 without the shader code) 
+Render a vulkan triangle in ~380 lines of [code](https://github.com/fknfilewalker/vulkan-triangle-modern/blob/sdl/src/main.cpp)! (~370 without the shader code) 
 
 ### Highlights
 * Vulkan hpp headers included as a c++ module (c++20 required)
@@ -20,5 +20,6 @@ Use CMake for project configuration. The included `make.bat` script can be used 
 > Please clone this repository with submodule!
 
 ### Notes
+* Only works with NVIDIA and RADV driver, as others still need to implement `VK_EXT_swapchain_maintenance1`
 * Linux should work (LLVM version >= 18.0.0 + Ninja build version >= 1.11)
 * On MacOS use a newer LLVM/Clang version from brew
