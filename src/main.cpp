@@ -13,6 +13,7 @@
 #include <memory>
 #include <deque>
 #include <cstring>
+#include <span>
 #include "shaders.h"
 import vulkan_hpp; // modules should come after all includes
 
@@ -215,20 +216,17 @@ struct Swapchain : Resource
 
 struct Shader : Resource
 {
-    struct Stage {
-        Stage(const vk::ShaderStageFlagBits stage, const std::reference_wrapper<const std::vector<uint32_t>> spv, std::string entry = "main") : stage{ stage }, spv{ spv }, entry{std::move(entry)} {}
-		vk::ShaderStageFlagBits stage; std::reference_wrapper<const std::vector<uint32_t>> spv; std::string entry;
-	};
+	using Stage = std::tuple<const vk::ShaderStageFlagBits, const std::span<uint32_t const>, std::string_view>; // stage, spv, entry
     Shader(const std::shared_ptr<Device>& device, const std::vector<Stage>& shaderStages, const std::vector<vk::PushConstantRange>& pcRanges) : Resource{ device },
         shaders{ shaderStages.size(), nullptr }, stages{ shaderStages.size() }, layout{ *dev, vk::PipelineLayoutCreateInfo{}.setPushConstantRanges(pcRanges) }
     {
         std::vector shaderCreateInfos{ shaderStages.size(), vk::ShaderCreateInfoEXT{ shaderStages.size() > 1u ? vk::ShaderCreateFlagBitsEXT::eLinkStage : vk::ShaderCreateFlagsEXT{} }
             .setCodeType(vk::ShaderCodeTypeEXT::eSpirv).setPushConstantRanges(pcRanges) };
         for (size_t i = 0; i < shaderStages.size(); ++i) {
-            shaderCreateInfos[i].setStage(shaderStages[i].stage).setPName(shaderStages[i].entry.c_str());
-            if (i < (shaderStages.size() - 1)) shaderCreateInfos[i].setNextStage(shaderStages[i + 1u].stage);
-            shaderCreateInfos[i].setCode<uint32_t>(shaderStages[i].spv.get());
-            stages[i] = shaderStages[i].stage;
+            shaderCreateInfos[i].setStage(std::get<0>(shaderStages[i])).setPName(std::get<2>(shaderStages[i]).data());
+            if (i < (shaderStages.size() - 1)) shaderCreateInfos[i].setNextStage(std::get<0>(shaderStages[i + 1u]));
+			shaderCreateInfos[i].setCode<uint32_t>(std::get<1>(shaderStages[i]));
+			stages[i] = std::get<0>(shaderStages[i]);
         }
         _shaders = dev->createShadersEXT(shaderCreateInfos);
         for (size_t i = 0; i < shaderStages.size(); ++i) shaders[i] = *_shaders[i]; // needed in order to pass the vector directly to bindShadersEXT()
