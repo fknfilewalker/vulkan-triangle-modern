@@ -273,7 +273,7 @@ int main(int /*argc*/, char** /*argv*/)
     // Surface Setup
     vk::raii::SurfaceKHR surface { nullptr };
     auto windowProps = SDL_GetWindowProperties(window);
-#ifdef VK_USE_PLATFORM_WIN32_KHR)
+#ifdef VK_USE_PLATFORM_WIN32_KHR
     surface = vk::raii::SurfaceKHR{ instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, (HWND)SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) } };
 #elif defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_WAYLAND_KHR)
     if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
