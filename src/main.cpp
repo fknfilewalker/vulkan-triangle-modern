@@ -154,7 +154,7 @@ struct Swapchain : Resource
 
         imageCount = std::max(3u, surfaceCapabilities.minImageCount);
         if (surfaceCapabilities.maxImageCount) imageCount = std::min(imageCount, surfaceCapabilities.maxImageCount);
-        swapchainCreateInfo = vk::SwapchainCreateInfoKHR{ { vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT },
+        swapchainCreateInfo = vk::SwapchainCreateInfoKHR{ { /* vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */ },
     		*surface, imageCount, surfaceFormats[0].format, surfaceFormats[0].colorSpace, surfaceCapabilities.currentExtent,
         	1u, vk::ImageUsageFlagBits::eColorAttachment }.setPresentMode(vk::PresentModeKHR::eFifo);
         createSwapchain();
