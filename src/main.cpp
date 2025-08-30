@@ -178,7 +178,7 @@ struct Swapchain : Resource
     void acquireNextImage() {
         auto& frame = acquireNewFrame();
         try { 
-            currentImageIdx = swapchain.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore).second;
+            currentImageIdx = swapchain.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore).value;
         } catch (const vk::OutOfDateKHRError&) { createSwapchain(); acquireNextImage(); return; } // unix
         /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */
         if(not *views[currentImageIdx]) {
