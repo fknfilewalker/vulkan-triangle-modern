@@ -31,6 +31,7 @@ target_compile_definitions(VulkanCppModule PUBLIC
     VULKAN_HPP_NO_SMART_HANDLE
     VULKAN_HPP_NO_SPACESHIP_OPERATOR
     VULKAN_HPP_NO_TO_STRING
+    VULKAN_HPP_NO_STD_MODULE
     VK_NO_PROTOTYPES
 )
 set_target_properties(VulkanCppModule PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/vulkan")
