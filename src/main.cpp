@@ -154,7 +154,7 @@ struct Swapchain : Resource
 
         imageCount = std::max(3u, surfaceCapabilities.minImageCount);
         if (surfaceCapabilities.maxImageCount) imageCount = std::min(imageCount, surfaceCapabilities.maxImageCount);
-        swapchainCreateInfo = vk::SwapchainCreateInfoKHR{ { /* vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */ },
+        swapchainCreateInfo = vk::SwapchainCreateInfoKHR{ { /* vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */ }, // causes problems with apps like RiverTuner
     		*surface, imageCount, surfaceFormats[0].format, surfaceFormats[0].colorSpace, surfaceCapabilities.currentExtent,
         	1u, vk::ImageUsageFlagBits::eColorAttachment }.setPresentMode(vk::PresentModeKHR::eImmediate);
         createSwapchain();
@@ -259,10 +259,9 @@ int main(int /*argc*/, char** /*argv*/)
     std::vector iLayers = { "VK_LAYER_LUNARG_monitor" };
 #if !defined( NDEBUG )
     iLayers.emplace_back("VK_LAYER_KHRONOS_validation");
-    if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
 #endif
-    iLayers.emplace_back("VK_LAYER_KHRONOS_shader_object"); // always activate this layer since everyone except NVIDIA requires it for now
-    if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) exitWithError("Instance layers not available");
+    iLayers.emplace_back("VK_LAYER_KHRONOS_shader_object"); // always try to activate this layer since many drivers still require this (requires Vulkan SDK though)
+    if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
 
     constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion12 };
