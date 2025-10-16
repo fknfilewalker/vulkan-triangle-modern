@@ -260,11 +260,12 @@ int main(int /*argc*/, char** /*argv*/)
 #if !defined( NDEBUG )
     iLayers.emplace_back("VK_LAYER_KHRONOS_validation");
 #endif
+    if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
     iLayers.emplace_back("VK_LAYER_KHRONOS_shader_object"); // always try to activate this layer since many drivers still require this (requires Vulkan SDK though)
     if (!extensionsOrLayersAvailable(context.enumerateInstanceLayerProperties(), iLayers)) iLayers.clear();
     if (!extensionsOrLayersAvailable(context.enumerateInstanceExtensionProperties(), iExtensions)) exitWithError("Instance extensions not available");
 
-    constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion12 };
+    constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion13 };
     vk::InstanceCreateInfo instanceCreateInfo{ {}, &applicationInfo, iLayers, iExtensions };
     if constexpr (isApple) instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
     const vk::raii::Instance instance(context, instanceCreateInfo);
@@ -273,7 +274,7 @@ int main(int /*argc*/, char** /*argv*/)
     vk::raii::SurfaceKHR surface { nullptr };
     auto windowProps = SDL_GetWindowProperties(window);
 #ifdef VK_USE_PLATFORM_WIN32_KHR
-    surface = vk::raii::SurfaceKHR{ instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, (HWND)SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) } };
+    surface = vk::raii::SurfaceKHR{ instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, static_cast<HWND>(SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr)) } };
 #elif defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_WAYLAND_KHR)
     if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
         Display *xdisplay = (Display *)SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
@@ -297,20 +298,17 @@ int main(int /*argc*/, char** /*argv*/)
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surface)) exitWithError("Queue family does not support presentation");
     // * check extensions
-    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::KHRDynamicRenderingExtensionName, vk::KHRSynchronization2ExtensionName, vk::EXTSwapchainMaintenance1ExtensionName };
+    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::EXTSwapchainMaintenance1ExtensionName };
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
-    auto vulkan11Features = vk::PhysicalDeviceVulkan11Features{}.setVariablePointers(true).setVariablePointersStorageBuffer(true);
-    auto bufferDeviceAddressFeatures = vk::PhysicalDeviceBufferDeviceAddressFeatures{ true }.setPNext(&vulkan11Features);
-    vk::PhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance{ true, &bufferDeviceAddressFeatures };
-    vk::PhysicalDeviceShaderObjectFeaturesEXT shaderObjectFeatures{ true, &swapchainMaintenance };
-    vk::PhysicalDeviceSynchronization2Features synchronization2Features{ true, &shaderObjectFeatures };
-    vk::PhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{ true, &synchronization2Features };
-    vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2{ {}, &dynamicRenderingFeatures };
-    physicalDeviceFeatures2.features.shaderInt64 = true;
+    auto vulkan13Features = vk::PhysicalDeviceVulkan13Features{}.setDynamicRendering(true).setSynchronization2(true);
+    auto vulkan12Features = vk::PhysicalDeviceVulkan12Features{}.setBufferDeviceAddress(true).setPNext(vulkan13Features);
+    auto shaderObjectFeatures = vk::PhysicalDeviceShaderObjectFeaturesEXT{}.setShaderObject(true).setPNext(vulkan12Features);
+    auto swapchainMaintenanceFeatures = vk::PhysicalDeviceSwapchainMaintenance1FeaturesEXT{}.setSwapchainMaintenance1(true).setPNext(shaderObjectFeatures);
+    auto physicalDeviceFeatures2 = vk::PhysicalDeviceFeatures2{}.setPNext(swapchainMaintenanceFeatures);
     // * create device
-    auto device = std::make_shared<Device>(physicalDevice, dExtensions, Device::Queues{{queueFamilyIndex.value(), 1}}, &physicalDeviceFeatures2);
+    const auto device = std::make_shared<Device>(physicalDevice, dExtensions, Device::Queues{{queueFamilyIndex.value(), 1}}, &swapchainMaintenanceFeatures);
 
     // Vertex buffer setup (triangle is upside down on purpose)
     const std::vector vertices = {
@@ -319,19 +317,19 @@ int main(int /*argc*/, char** /*argv*/)
          0.0f,  0.5f, 0.0f, 1.0f
     };
     const size_t verticesSize = vertices.size() * sizeof(float);
-    const Buffer buffer{ device, verticesSize, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible }; /* reBAR */
-    void* p = buffer.memory.mapMemory(0, vk::WholeSize);
+    const Buffer buffer{ device, verticesSize, {}, vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible }; /* reBAR */
+    void* const p = buffer.memory.mapMemory(0, vk::WholeSize);
     std::memcpy(p, vertices.data(), verticesSize);
     buffer.memory.unmapMemory();
 
     // Shader object setup : https://github.com/KhronosGroup/Vulkan-Docs/blob/main/proposals/VK_EXT_shader_object.adoc
     constexpr vk::PushConstantRange pcRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(uint64_t) };
-    Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, shaders_spv, "vertexMain" }, { vk::ShaderStageFlagBits::eFragment, shaders_spv, "fragmentMain" } }, { pcRange } };
+    const Shader shader{ device, { { vk::ShaderStageFlagBits::eVertex, shaders_spv, "vertexMain" }, { vk::ShaderStageFlagBits::eFragment, shaders_spv, "fragmentMain" } }, { pcRange } };
 
     // Swapchain setup
     Swapchain swapchain{ device, surface, queueFamilyIndex.value() };
     auto imgMemBarrier = vk::ImageMemoryBarrier2{}.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
-    vk::DependencyInfo dependencyInfo = vk::DependencyInfo{}.setImageMemoryBarriers(imgMemBarrier);
+    const vk::DependencyInfo dependencyInfo = vk::DependencyInfo{}.setImageMemoryBarriers(imgMemBarrier);
 
     bool running = true, minimized = false;
     while (running) {
@@ -344,19 +342,17 @@ int main(int /*argc*/, char** /*argv*/)
         if (minimized) continue;
         
         swapchain.acquireNextImage();
-        const auto& cFrame = swapchain.getCurrentFrame();
-        const auto& cmdBuffer = cFrame.commandBuffer;
+        const auto& frame = swapchain.getCurrentFrame();
+        const auto& cmdBuffer = frame.commandBuffer;
 
         imgMemBarrier.setImage(swapchain.getCurrentImage())
             .setOldLayout(vk::ImageLayout::eUndefined).setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
-            .setSrcStageMask(vk::PipelineStageFlagBits2::eAllCommands).setSrcAccessMask({})
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eAllCommands).setSrcAccessMask(vk::AccessFlagBits2::eNone)
             .setDstStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput).setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite);
         cmdBuffer.pipelineBarrier2(dependencyInfo);
         
-        vk::RenderingAttachmentInfo rAttachmentInfo{ *swapchain.getCurrentImageView(), vk::ImageLayout::eColorAttachmentOptimal};
-        rAttachmentInfo.clearValue.color = { 0.0f, 0.0f, 0.0f, 1.0f };
-        rAttachmentInfo.loadOp = vk::AttachmentLoadOp::eClear;
-        rAttachmentInfo.storeOp = vk::AttachmentStoreOp::eStore;
+        const auto rAttachmentInfo = vk::RenderingAttachmentInfo{ *swapchain.getCurrentImageView(), vk::ImageLayout::eColorAttachmentOptimal}
+			.setLoadOp(vk::AttachmentLoadOp::eClear).setStoreOp(vk::AttachmentStoreOp::eStore).setClearValue(vk::ClearColorValue{ 0.0f, 0.0f, 0.0f, 1.0f });
         cmdBuffer.beginRendering({ {}, { {}, swapchain.extent() }, 1, 0, 1, &rAttachmentInfo });
         {
             /* set render state for shader objects */
