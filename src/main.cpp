@@ -177,9 +177,7 @@ struct Swapchain : Resource
 
     void acquireNextImage() {
         auto& frame = acquireNewFrame();
-        try { 
-            currentImageIdx = swapchain.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore).value;
-        } catch (const vk::OutOfDateKHRError&) { createSwapchain(); acquireNextImage(); return; } // unix
+        currentImageIdx = swapchain.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore).value;
         /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */
         if(not *views[currentImageIdx]) {
         	views[currentImageIdx] = vk::raii::ImageView{ *dev, vk::ImageViewCreateInfo{ {}, images[currentImageIdx], vk::ImageViewType::e2D,
@@ -189,15 +187,14 @@ struct Swapchain : Resource
     }
 
     void submitImage(const vk::raii::Queue& presentQueue) {
-        auto& frame = frames.back();
+        const auto& frame = frames.back();
         frame.commandBuffer.end();
 
         constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         presentQueue.submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, 
             waitDstStageMask, *frame.commandBuffer, *frame.renderFinishedSemaphore });
-        vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
-        try { auto _ = presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchain, currentImageIdx, {}, &presentFenceInfo }); }
-        catch (const vk::OutOfDateKHRError&) { presentQueue.waitIdle(); frames.clear(); createSwapchain(); } // win32
+        const vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
+        auto _ = presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchain, currentImageIdx, {}, &presentFenceInfo });
     }
 
     Frame& getCurrentFrame() { return frames.back(); }
@@ -335,9 +332,10 @@ int main(int /*argc*/, char** /*argv*/)
     while (running) {
         SDL_Event windowEvent;
         while (SDL_PollEvent(&windowEvent)) {
-            if (windowEvent.type == SDL_EVENT_QUIT) { running = false; break; }
-            if (windowEvent.type == SDL_EVENT_WINDOW_MINIMIZED) { minimized = true; break; }
-            if (windowEvent.type == SDL_EVENT_WINDOW_RESTORED) { minimized = false; break; }
+            if (windowEvent.type == SDL_EVENT_QUIT) { running = false; }
+            else if (windowEvent.type == SDL_EVENT_WINDOW_MINIMIZED) { minimized = true; }
+            else if (windowEvent.type == SDL_EVENT_WINDOW_RESTORED) { swapchain.createSwapchain(); minimized = false; }
+            else if (windowEvent.type == SDL_EVENT_WINDOW_RESIZED) { swapchain.createSwapchain(); }
         }
         if (minimized) continue;
         
