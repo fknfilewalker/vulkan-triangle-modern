@@ -160,9 +160,11 @@ struct Swapchain : Resource
         createSwapchain();
     }
 
-    void createSwapchain() {
-        const auto surfaceCapabilities = dev->physicalDevice.getSurfaceCapabilitiesKHR(swapchainCreateInfo.surface);
-        swapchainCreateInfo.imageExtent = surfaceCapabilities.currentExtent;
+    void createSwapchain(uint32_t width = 0, uint32_t height = 0) {
+        const auto sc = dev->physicalDevice.getSurfaceCapabilitiesKHR(swapchainCreateInfo.surface);
+        const bool valid = sc.currentExtent.width != std::numeric_limits<uint32_t>::max();
+        swapchainCreateInfo.imageExtent.width = valid ? sc.currentExtent.width : std::clamp(width, sc.minImageExtent.width, sc.maxImageExtent.width);
+        swapchainCreateInfo.imageExtent.height = valid ? sc.currentExtent.height : std::clamp(height, sc.minImageExtent.height, sc.maxImageExtent.height);
         swapchainCreateInfo.oldSwapchain = *swapchain;
         swapchain = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfo };
         images = swapchain.getImages();
@@ -330,12 +332,12 @@ int main(int /*argc*/, char** /*argv*/)
 
     bool running = true, minimized = false;
     while (running) {
-        SDL_Event windowEvent;
-        while (SDL_PollEvent(&windowEvent)) {
-            if (windowEvent.type == SDL_EVENT_QUIT) { running = false; }
-            else if (windowEvent.type == SDL_EVENT_WINDOW_MINIMIZED) { minimized = true; }
-            else if (windowEvent.type == SDL_EVENT_WINDOW_RESTORED) { swapchain.createSwapchain(); minimized = false; }
-            else if (windowEvent.type == SDL_EVENT_WINDOW_RESIZED) { swapchain.createSwapchain(); }
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_EVENT_QUIT) { running = false; }
+            else if (event.type == SDL_EVENT_WINDOW_MINIMIZED) { minimized = true; }
+            else if (event.type == SDL_EVENT_WINDOW_RESTORED) { swapchain.createSwapchain(); minimized = false; }
+            else if (event.type == SDL_EVENT_WINDOW_RESIZED) { swapchain.createSwapchain(event.window.data1, event.window.data2); }
         }
         if (minimized) continue;
         
