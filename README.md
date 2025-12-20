@@ -20,7 +20,6 @@ Use CMake for project configuration. The included `make.bat` script can be used 
 > Please clone this repository with submodule!
 
 ### Notes
-* Only works with NVIDIA and RADV driver, as others still need to implement `VK_EXT_swapchain_maintenance1` aka `VK_KHR_swapchain_maintenance1`
 * `eDeferredMemoryAllocationEXT` can crash the app when apps like RiverTuner are running in the back (deactivated, see line \#107)
 * Visual Studio (Code) still has problems with module syntax highlighting, possible solutions are
     * (VS) installing [ReSharper](https://de.wikipedia.org/wiki/ReSharper)
