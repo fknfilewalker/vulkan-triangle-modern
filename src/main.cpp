@@ -25,7 +25,7 @@ constexpr bool isApple = false;
 
 constexpr struct { uint32_t width, height; } target { 800u, 600u }; // our window
 [[maybe_unused]] constexpr std::string_view shaders = R"(
-[[vk::push_constant]] float3* vertices;
+[vk::push_constant] float3* vertices;
 
 [shader("vertex")]
 float4 vertexMain(uint vid : SV_VertexID) : SV_Position
@@ -154,7 +154,7 @@ struct Swapchain : Resource
 
         imageCount = std::max(3u, surfaceCapabilities.minImageCount);
         if (surfaceCapabilities.maxImageCount) imageCount = std::min(imageCount, surfaceCapabilities.maxImageCount);
-        swapchainCreateInfo = vk::SwapchainCreateInfoKHR{ { /* vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */ }, // causes problems with apps like RiverTuner
+        swapchainCreateInfo = vk::SwapchainCreateInfoKHR{ { /* vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocation */ }, // causes problems with apps like RiverTuner
     		*surface, imageCount, surfaceFormats[0].format, surfaceFormats[0].colorSpace, surfaceCapabilities.currentExtent,
         	1u, vk::ImageUsageFlagBits::eColorAttachment }.setPresentMode(vk::PresentModeKHR::eImmediate);
         createSwapchain();
@@ -195,7 +195,7 @@ struct Swapchain : Resource
         constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         presentQueue.submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, 
             waitDstStageMask, *frame.commandBuffer, *frame.renderFinishedSemaphore });
-        const vk::SwapchainPresentFenceInfoEXT presentFenceInfo{ *frame.presentFinishFence };
+        const vk::SwapchainPresentFenceInfoKHR presentFenceInfo{ *frame.presentFinishFence };
         auto _ = presentQueue.presentKHR({ *frame.renderFinishedSemaphore, *swapchain, currentImageIdx, {}, &presentFenceInfo });
     }
 
@@ -243,7 +243,7 @@ int main(int /*argc*/, char** /*argv*/)
 
     const vk::raii::Context context;
     // Instance Setup
-    std::vector iExtensions{ vk::KHRSurfaceExtensionName, vk::EXTSurfaceMaintenance1ExtensionName, vk::KHRGetSurfaceCapabilities2ExtensionName };
+    std::vector iExtensions{ vk::KHRSurfaceExtensionName, vk::KHRSurfaceMaintenance1ExtensionName, vk::KHRGetSurfaceCapabilities2ExtensionName };
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     iExtensions.emplace_back(vk::KHRWin32SurfaceExtensionName);
 #elif VK_USE_PLATFORM_XLIB_KHR
@@ -297,7 +297,7 @@ int main(int /*argc*/, char** /*argv*/)
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surface)) exitWithError("Queue family does not support presentation");
     // * check extensions
-    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::EXTSwapchainMaintenance1ExtensionName };
+    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::KHRSwapchainMaintenance1ExtensionName, vk::EXTShaderObjectExtensionName };
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features

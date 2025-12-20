@@ -8,8 +8,8 @@ Render a vulkan triangle in ~380 lines of [code](https://github.com/fknfilewalke
 * Shader objects (`VK_EXT_shader_object`)
 * Bindless rendering using buffer references (`VK_EXT_buffer_device_address`)
 * (Resizable) BAR for device local buffer access
-* Deferred swapchain image allocation (`VK_EXT_swapchain_maintenance1`)
-* Straightforward swapchain sync (`VK_EXT_swapchain_maintenance1`)
+* Deferred swapchain image allocation (`VK_KHR_swapchain_maintenance1`)
+* Straightforward swapchain sync (`VK_KHR_swapchain_maintenance1`)
 * [Slang](https://github.com/shader-slang/slang) used for shader code
 * Modular code
 * [SDL3](https://github.com/libsdl-org/SDL.git) for window handling
@@ -22,6 +22,9 @@ Use CMake for project configuration. The included `make.bat` script can be used 
 ### Notes
 * Only works with NVIDIA and RADV driver, as others still need to implement `VK_EXT_swapchain_maintenance1` aka `VK_KHR_swapchain_maintenance1`
 * `eDeferredMemoryAllocationEXT` can crash the app when apps like RiverTuner are running in the back (deactivated, see line \#107)
-* Visual Studio (Code) still has problems with module syntax highlighting, installing [ReSharper](https://de.wikipedia.org/wiki/ReSharper) or switching the module import to `#include <vulkan/vulkan_raii.hpp>` fixes this
+* Visual Studio (Code) still has problems with module syntax highlighting, possible solutions are
+    * (VS) installing [ReSharper](https://de.wikipedia.org/wiki/ReSharper)
+    * (VSC) using [clangd](https://marketplace.visualstudio.com/items?itemName=llvm-vs-code-extensions.vscode-clangd) with the argument `--experimental-modules-support`
+    * switching the module import to `#include <vulkan/vulkan_raii.hpp>`
 * Linux with Clang works (LLVM version >= 18.0.0 + Ninja build version >= 1.11)
 * On MacOS use the latest version of LLVM/Clang from brew and install the Vulkan SDK
