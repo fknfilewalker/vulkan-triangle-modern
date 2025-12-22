@@ -37,21 +37,13 @@ target_compile_definitions(VulkanCppModule PUBLIC
 set_target_properties(VulkanCppModule PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/vulkan")
 
 if(WIN32)
-    target_compile_definitions(VulkanCppModule PUBLIC 
-        VK_USE_PLATFORM_WIN32_KHR
+    target_compile_definitions(VulkanCppModule PUBLIC
         NOMINMAX
     )
 elseif(APPLE)
-    target_compile_definitions(VulkanCppModule PUBLIC 
-        VK_USE_PLATFORM_METAL_EXT
-    )
     find_package(Vulkan REQUIRED)
     target_link_libraries(VulkanCppModule PUBLIC "Vulkan::Vulkan")
 elseif(UNIX)
-    target_compile_definitions(VulkanCppModule PUBLIC
-        VK_USE_PLATFORM_XLIB_KHR
-        VK_USE_PLATFORM_WAYLAND_KHR
-    )
 endif()
 
 set(SDL_DISABLE_UNINSTALL ON)
@@ -69,7 +61,7 @@ set(SDL_SENSOR OFF)
 set(SDL_DIALOG OFF)
 set(SDL_DIRECTX OFF)
 set(SDL_OPENGLES OFF)
-set(SDL_VULKAN OFF)
+set(SDL_VULKAN ON)
 set(SDL_OFFSCREEN OFF)
 add_subdirectory("${VTM_EXTERNAL_DIR}/sdl" EXCLUDE_FROM_ALL)
 target_compile_definitions(SDL3-static PUBLIC SDL_MAIN_HANDLED)

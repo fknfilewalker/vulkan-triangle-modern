@@ -1,10 +1,5 @@
 #include <SDL3/SDL.h>
-#ifdef _WIN32
-#include <Windows.h>
-#elif defined(__linux__)
-#include <X11/Xlib.h>
-#include <wayland-client.h>
-#endif
+#include <SDL3/SDL_vulkan.h>
 #include <optional>
 #include <algorithm>
 #include <bitset>
@@ -25,7 +20,7 @@ constexpr bool isApple = false;
 
 constexpr struct { uint32_t width, height; } target { 800u, 600u }; // our window
 [[maybe_unused]] constexpr std::string_view shaders = R"(
-[vk::push_constant] float3* vertices;
+[vk::push_constant] float4* vertices;
 
 [shader("vertex")]
 float4 vertexMain(uint vid : SV_VertexID) : SV_Position
@@ -55,17 +50,21 @@ bool extensionsOrLayersAvailable(const std::vector<T>& available, const std::vec
     });
 }
 
-std::optional<uint32_t> findQueueFamilyIndex(const std::vector<vk::QueueFamilyProperties>& queueFamiliesProperties, const vk::QueueFlags queueFlags) {
+std::optional<uint32_t> findQueueFamilyIndex(const vk::raii::PhysicalDevice& physicalDevice, const vk::QueueFlags queueFlags, const vk::Instance instance = nullptr) {
+    const auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     std::optional<uint32_t> bestFamily;
     std::bitset<12> bestScore = 0;
-    for (uint32_t i = 0; i < queueFamiliesProperties.size(); i++) {
+    for (uint32_t i = 0; i < queueFamilyProperties.size(); i++) {
         // check if queue family supports all requested queue flags
-        if (static_cast<uint32_t>(queueFamiliesProperties[i].queueFlags & queueFlags) == static_cast<uint32_t>(queueFlags)) {
-            const std::bitset<12> score = static_cast<uint32_t>(queueFamiliesProperties[i].queueFlags);
+        if (static_cast<uint32_t>(queueFamilyProperties[i].queueFlags & queueFlags) == static_cast<uint32_t>(queueFlags)) {
+            const std::bitset<12> score = static_cast<uint32_t>(queueFamilyProperties[i].queueFlags);
             // use queue family with the least other bits set
             if (!bestFamily.has_value() || score.count() < bestScore.count()) {
-                bestFamily = i;
-                bestScore = score;
+                // check presentation support too if instance is given
+                if(instance == nullptr || SDL_Vulkan_GetPresentationSupport(instance, *physicalDevice, i)) {
+                    bestFamily = i;
+                    bestScore = score;
+                }
             }
         }
     }
@@ -188,11 +187,9 @@ struct Swapchain : Resource
         frame.commandBuffer.begin({});
     }
 
-    void submitImage(const vk::raii::Queue& presentQueue) {
+    void submitImage(const vk::raii::Queue& presentQueue, const vk::PipelineStageFlags waitDstStageMask) {
         const auto& frame = frames.back();
         frame.commandBuffer.end();
-
-        constexpr vk::PipelineStageFlags waitDstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         presentQueue.submit(vk::SubmitInfo{ *frame.imageAvailableSemaphore, 
             waitDstStageMask, *frame.commandBuffer, *frame.renderFinishedSemaphore });
         const vk::SwapchainPresentFenceInfoKHR presentFenceInfo{ *frame.presentFinishFence };
@@ -239,20 +236,16 @@ struct Shader : Resource
 int main(int /*argc*/, char** /*argv*/)
 {
     if (!SDL_Init(0)) exitWithError("Failed to init SDL");
-    SDL_Window* window = SDL_CreateWindow("Vulkan Triangle Modern", target.width, target.height, SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow("Vulkan Triangle Modern", target.width, target.height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
     const vk::raii::Context context;
     // Instance Setup
-    std::vector iExtensions{ vk::KHRSurfaceExtensionName, vk::KHRSurfaceMaintenance1ExtensionName, vk::KHRGetSurfaceCapabilities2ExtensionName };
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-    iExtensions.emplace_back(vk::KHRWin32SurfaceExtensionName);
-#elif VK_USE_PLATFORM_XLIB_KHR
-    iExtensions.emplace_back(vk::KHRXlibSurfaceExtensionName);
-#elif VK_USE_PLATFORM_WAYLAND_KHR
-    iExtensions.emplace_back(vk::KHRWaylandSurfaceExtensionName);
-#elif VK_USE_PLATFORM_METAL_EXT
-    iExtensions.emplace_back(vk::EXTMetalSurfaceExtensionName);
-#endif
+    std::vector iExtensions{ vk::KHRSurfaceMaintenance1ExtensionName, vk::KHRGetSurfaceCapabilities2ExtensionName };
+    {
+        uint32_t count;
+        const auto sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&count);
+        iExtensions.insert(iExtensions.end(), sdlExtensions, sdlExtensions + count);
+    }
     if constexpr (isApple) iExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
 
     std::vector iLayers = { "VK_LAYER_LUNARG_monitor" };
@@ -270,32 +263,14 @@ int main(int /*argc*/, char** /*argv*/)
     const vk::raii::Instance instance(context, instanceCreateInfo);
 
     // Surface Setup
-    vk::raii::SurfaceKHR surface { nullptr };
-    auto windowProps = SDL_GetWindowProperties(window);
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-    surface = vk::raii::SurfaceKHR{ instance, vk::Win32SurfaceCreateInfoKHR{ {}, nullptr, static_cast<HWND>(SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr)) } };
-#elif defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_WAYLAND_KHR)
-    if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
-        Display *xdisplay = (Display *)SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
-        Window xwindow = (Window)SDL_GetNumberProperty(windowProps, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
-        surface = vk::raii::SurfaceKHR{ instance, vk::XlibSurfaceCreateInfoKHR{ {}, xdisplay, xwindow } };
-    }
-    else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
-        wl_display* wldisplay = (wl_display*)SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
-        wl_surface* wlsurface = (wl_surface*)SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
-        surface = vk::raii::SurfaceKHR{ instance, vk::WaylandSurfaceCreateInfoKHR{ {}, wldisplay, wlsurface } };
-    }
-#elif defined(VK_USE_PLATFORM_METAL_EXT)
-    surface = vk::raii::SurfaceKHR{ instance, vk::MetalSurfaceCreateInfoEXT{ {}, SDL_Metal_GetLayer(SDL_Metal_CreateView(window)) }};
-#endif
+    vk::raii::SurfaceKHR surface{ instance, nullptr };
+    if (!SDL_Vulkan_CreateSurface(window, *instance, nullptr, (VkSurfaceKHR*)&*surface)) exitWithError("Failed to create Vulkan surface");
     // Device setup
     const vk::raii::PhysicalDevices physicalDevices{ instance };
     const vk::raii::PhysicalDevice& physicalDevice{ physicalDevices[0] };
     // * find queue
-    const auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
-    const auto queueFamilyIndex = findQueueFamilyIndex(queueFamilyProperties, vk::QueueFlagBits::eGraphics);
+    const auto queueFamilyIndex = findQueueFamilyIndex(physicalDevice, vk::QueueFlagBits::eGraphics, instance);
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
-    if (!physicalDevice.getSurfaceSupportKHR(queueFamilyIndex.value(), *surface)) exitWithError("Queue family does not support presentation");
     // * check extensions
     std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::KHRSwapchainMaintenance1ExtensionName, vk::EXTShaderObjectExtensionName };
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
@@ -385,7 +360,7 @@ int main(int /*argc*/, char** /*argv*/)
             .setSrcStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput).setSrcAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite)
             .setDstStageMask(vk::PipelineStageFlagBits2::eNone).setDstAccessMask(vk::AccessFlagBits2::eNone);
         cmdBuffer.pipelineBarrier2(dependencyInfo);
-        swapchain.submitImage(device->queue[queueFamilyIndex.value()][0]);
+        swapchain.submitImage(device->queue[queueFamilyIndex.value()][0], vk::PipelineStageFlagBits::eColorAttachmentOutput);
     }
     device->waitIdle();
     SDL_DestroyWindow(window);
