@@ -9,6 +9,7 @@
 #include <deque>
 #include <cstring>
 #include <span>
+#include <limits>
 #include "shaders.h"
 import vulkan_hpp; // modules should come after all includes
 
