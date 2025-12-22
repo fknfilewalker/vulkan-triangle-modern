@@ -272,7 +272,9 @@ int main(int /*argc*/, char** /*argv*/)
     const auto queueFamilyIndex = findQueueFamilyIndex(physicalDevice, vk::QueueFlagBits::eGraphics, instance);
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     // * check extensions
-    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::KHRSwapchainMaintenance1ExtensionName, vk::EXTShaderObjectExtensionName };
+    std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName };
+    if constexpr (isApple) dExtensions.emplace_back(vk::EXTSwapchainMaintenance1ExtensionName);
+    else dExtensions.emplace_back(vk::KHRSwapchainMaintenance1ExtensionName);
     if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
