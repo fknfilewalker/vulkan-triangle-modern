@@ -26,7 +26,7 @@ constexpr struct { uint32_t width, height; } target { 800u, 600u }; // our windo
 [shader("vertex")]
 float4 vertexMain(uint vid : SV_VertexID) : SV_Position
 {
-    return float4(vertices[vid], 1.0);
+    return vertices[vid];
 }
 
 [shader("fragment")]
@@ -180,7 +180,7 @@ struct Swapchain : Resource
     void acquireNextImage() {
         auto& frame = acquireNewFrame();
         currentImageIdx = swapchain.acquireNextImage(UINT64_MAX, *frame.imageAvailableSemaphore).value;
-        /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocationEXT */
+        /* create image view after image is acquired because of vk::SwapchainCreateFlagBitsKHR::eDeferredMemoryAllocation */
         if(not *views[currentImageIdx]) {
         	views[currentImageIdx] = vk::raii::ImageView{ *dev, vk::ImageViewCreateInfo{ {}, images[currentImageIdx], vk::ImageViewType::e2D,
                 swapchainCreateInfo.imageFormat, {}, { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } } };
@@ -281,13 +281,14 @@ int main(int /*argc*/, char** /*argv*/)
     // * activate features
     auto vulkan13Features = vk::PhysicalDeviceVulkan13Features{}.setDynamicRendering(true).setSynchronization2(true);
     auto vulkan12Features = vk::PhysicalDeviceVulkan12Features{}.setBufferDeviceAddress(true).setPNext(vulkan13Features);
-    auto shaderObjectFeatures = vk::PhysicalDeviceShaderObjectFeaturesEXT{}.setShaderObject(true).setPNext(vulkan12Features);
+    auto vulkan11Features = vk::PhysicalDeviceVulkan11Features{}.setShaderDrawParameters(true).setPNext(vulkan12Features);
+    auto shaderObjectFeatures = vk::PhysicalDeviceShaderObjectFeaturesEXT{}.setShaderObject(true).setPNext(vulkan11Features);
     auto swapchainMaintenanceFeatures = vk::PhysicalDeviceSwapchainMaintenance1FeaturesEXT{}.setSwapchainMaintenance1(true).setPNext(shaderObjectFeatures);
     auto physicalDeviceFeatures2 = vk::PhysicalDeviceFeatures2{}.setPNext(swapchainMaintenanceFeatures);
     // * create device
     const auto device = std::make_shared<Device>(physicalDevice, dExtensions, Device::Queues{{queueFamilyIndex.value(), 1}}, &swapchainMaintenanceFeatures);
 
-    // Vertex buffer setup (triangle is upside down on purpose)
+    // Vertex buffer setup
     const std::vector vertices = {
         -0.5f, -0.5f, 0.0f, 1.0f,
          0.5f, -0.5f, 0.0f, 1.0f,

@@ -1,5 +1,5 @@
-/* Usage: 
-slangc shaders.slang -target spirv -emit-spirv-directly -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name shaders_spv -o shaders.h
+/* Usage:
+slangc shaders.slang -target spirv -fvk-invert-y -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name shaders_spv -o shaders.h
 */
 [vk::push_constant] float4* vertices;
 
