@@ -3,14 +3,19 @@ slangc shaders.slang -target spirv -fvk-invert-y -fvk-use-entrypoint-name -sourc
 */
 [vk::push_constant] float4* vertices;
 
-[shader("vertex")]
-float4 vertexMain(uint vid : SV_VertexID) : SV_Position
+struct OutIn
 {
-    return vertices[vid];
+    float4 position : SV_POSITION, color : COLOR;
+};
+
+[shader("vertex")]
+OutIn vertexMain(uint vid : SV_VertexID)
+{
+    return { vertices[vid], { float3(uint3(0, 1, 2) == (vid % 3)), 1.0 } };
 }
 
 [shader("fragment")]
-float4 fragmentMain() : SV_Target
+float4 fragmentMain(OutIn input) : SV_Target
 {
-    return float4(1.0, 0.0, 0.0, 1.0);
+    return input.color;
 }
