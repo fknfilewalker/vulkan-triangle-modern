@@ -66,7 +66,6 @@ set(SDL_OFFSCREEN OFF)
 add_subdirectory("${VTM_EXTERNAL_DIR}/sdl" EXCLUDE_FROM_ALL)
 target_compile_definitions(SDL3-static PUBLIC SDL_MAIN_HANDLED)
 set_target_properties(SDL3-static PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/sdl")
-set_target_properties(SDL_uclibc PROPERTIES FOLDER "${VTM_EXTERNAL_FOLDER}/sdl")
 
 #================================#
 # Main Target                    #
