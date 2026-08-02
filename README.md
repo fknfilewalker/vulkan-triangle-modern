@@ -14,6 +14,7 @@ Render a vulkan triangle in ~380 lines of [code](https://github.com/fknfilewalke
 * Modular code
 * [Slang](https://github.com/shader-slang/slang) used for shader code
 * [SDL3](https://github.com/libsdl-org/SDL.git) for window handling
+* No Apple specific code thanks to KosmicKrisp
 
 ### How to build (on windows)
 Use CMake for project configuration. The included `make.bat` script can be used for this. The Vulkan SDK is not required to run this code. Only for validation layers a Vulkan SDK installation is necessary.
@@ -27,4 +28,4 @@ Use CMake for project configuration. The included `make.bat` script can be used 
     * (VSC) using [clangd](https://marketplace.visualstudio.com/items?itemName=llvm-vs-code-extensions.vscode-clangd) with the argument `--experimental-modules-support`
     * switching the module import to `#include <vulkan/vulkan_raii.hpp>`
 * Linux with Clang works (LLVM version >= 18.0.0 + Ninja build version >= 1.11)
-* On MacOS use the latest version of LLVM/Clang from brew and install the Vulkan SDK (using MoltenVK for now)
+* On MacOS use the latest version of LLVM/Clang from brew and install the Vulkan SDK (for KosmicKrisp)

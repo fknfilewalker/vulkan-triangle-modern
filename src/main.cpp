@@ -13,12 +13,6 @@
 #include "shaders.h"
 import vulkan_hpp; // modules should come after all includes
 
-#ifdef __APPLE__
-constexpr bool isApple = true;
-#else
-constexpr bool isApple = false;
-#endif
-
 constexpr struct { uint32_t width, height; } target { 800u, 600u }; // our window
 [[maybe_unused]] constexpr std::string_view shaders = R"(
 [vk::push_constant] float4* vertices;
@@ -252,7 +246,6 @@ int main(int /*argc*/, char** /*argv*/)
         const auto sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&count);
         iExtensions.insert(iExtensions.end(), sdlExtensions, sdlExtensions + count);
     }
-    if constexpr (isApple) iExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
 
     std::vector iLayers = { "VK_LAYER_LUNARG_monitor" };
 #if !defined( NDEBUG )
@@ -265,7 +258,6 @@ int main(int /*argc*/, char** /*argv*/)
 
     constexpr vk::ApplicationInfo applicationInfo{ nullptr, 0, nullptr, 0, vk::ApiVersion13 };
     vk::InstanceCreateInfo instanceCreateInfo{ {}, &applicationInfo, iLayers, iExtensions };
-    if constexpr (isApple) instanceCreateInfo.setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR);
     const vk::raii::Instance instance(context, instanceCreateInfo);
 
     // Surface Setup
@@ -279,7 +271,6 @@ int main(int /*argc*/, char** /*argv*/)
     if (!queueFamilyIndex.has_value()) exitWithError("No queue family index found");
     // * check extensions
     std::vector dExtensions{ vk::KHRSwapchainExtensionName, vk::EXTShaderObjectExtensionName, vk::KHRSwapchainMaintenance1ExtensionName };
-    if constexpr (isApple) dExtensions.emplace_back("VK_KHR_portability_subset");
     if (!extensionsOrLayersAvailable(physicalDevice.enumerateDeviceExtensionProperties(), dExtensions)) exitWithError("Device extensions not available");
     // * activate features
     auto vulkan13Features = vk::PhysicalDeviceVulkan13Features{}.setDynamicRendering(true).setSynchronization2(true);
