@@ -2,8 +2,12 @@
 
 Render a vulkan triangle in ~380 lines of [code](https://github.com/fknfilewalker/vulkan-triangle-modern/blob/sdl/src/main.cpp)! (~370 without the shader code) 
 
+> The vulkan headers removed the possibility of using the module without using the std modules, which means C++23 and CMake's experimental `import std` support (CMake >= 3.30) are now required. The std library therefore also comes in via `import std;` instead of includes.
+
+> Please clone this repository with submodule!
+
 ### Highlights
-* Vulkan hpp headers included as a c++ module (c++20 required)
+* Vulkan hpp headers included as a c++ module (c++23 required)
 * Vulkan SDK not required (with the exception of MacOS)
 * Dynamic rendering (`VK_KHR_dynamic_rendering`)
 * Shader objects (`VK_EXT_shader_object`)
@@ -16,10 +20,12 @@ Render a vulkan triangle in ~380 lines of [code](https://github.com/fknfilewalke
 * [SDL3](https://github.com/libsdl-org/SDL.git) for window handling
 * No Apple specific code thanks to KosmicKrisp
 
-### How to build (on windows)
+### How to build
+#### Windows
 Use CMake for project configuration. The included `make.bat` script can be used for this. The Vulkan SDK is not required to run this code. Only for validation layers a Vulkan SDK installation is necessary.
 
-> Please clone this repository with submodule!
+#### MacOS
+`brew install cmake llvm ninja vulkan-loader mesa vulkan-validationlayers`
 
 ### Notes
 * `eDeferredMemoryAllocation` can crash the app when apps like RiverTuner are running in the back (deactivated, see line \#107)
@@ -28,4 +34,4 @@ Use CMake for project configuration. The included `make.bat` script can be used 
     * (VSC) using [clangd](https://marketplace.visualstudio.com/items?itemName=llvm-vs-code-extensions.vscode-clangd) with the argument `--experimental-modules-support`
     * switching the module import to `#include <vulkan/vulkan_raii.hpp>`
 * Linux with Clang works (LLVM version >= 18.0.0 + Ninja build version >= 1.11)
-* On MacOS use the latest version of LLVM/Clang from brew and install the Vulkan SDK (for KosmicKrisp)
+* On MacOS use the latest version of LLVM/Clang from brew

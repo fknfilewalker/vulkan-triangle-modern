@@ -1,17 +1,8 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
-#include <optional>
-#include <algorithm>
-#include <bitset>
-#include <vector>
-#include <unordered_map>
-#include <memory>
-#include <deque>
-#include <cstring>
-#include <span>
-#include <limits>
 #include "shaders.h"
-import vulkan_hpp; // modules should come after all includes
+import std; // modules should come after all includes
+import vulkan;
 
 constexpr struct { uint32_t width, height; } target { 800u, 600u }; // our window
 [[maybe_unused]] constexpr std::string_view shaders = R"(
@@ -36,7 +27,7 @@ float4 fragmentMain(OutIn input) : SV_Target
 
 [[noreturn]] void exitWithError(const std::string_view error) {
     std::printf("%s\n", error.data());
-    exit(EXIT_FAILURE);
+    std::exit(1);
 }
 
 template<typename T>
