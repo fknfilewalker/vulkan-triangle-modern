@@ -2,12 +2,10 @@
 
 Render a vulkan triangle in ~380 lines of [code](https://github.com/fknfilewalker/vulkan-triangle-modern/blob/sdl/src/main.cpp)! (~370 without the shader code) 
 
-> The vulkan headers removed the possibility of using the module without using the std modules, which means C++23 and CMake's experimental `import std` support (CMake >= 3.30) are now required. The std library therefore also comes in via `import std;` instead of includes.
-
 > Please clone this repository with submodule!
 
 ### Highlights
-* Vulkan hpp headers included as a c++ module (c++23 required)
+* Vulkan hpp headers included as a c++ module (c++20 required)
 * Vulkan SDK not required (with the exception of MacOS)
 * Dynamic rendering (`VK_KHR_dynamic_rendering`)
 * Shader objects (`VK_EXT_shader_object`)

@@ -1,8 +1,18 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
+#include <optional>
+#include <algorithm>
+#include <bitset>
+#include <vector>
+#include <unordered_map>
+#include <memory>
+#include <deque>
+#include <cstring>
+#include <cstdlib>
+#include <span>
+#include <limits>
 #include "shaders.h"
-import std; // modules should come after all includes
-import vulkan;
+import vulkan; // modules should come after all includes
 
 constexpr struct { uint32_t width, height; } target { 800u, 600u }; // our window
 [[maybe_unused]] constexpr std::string_view shaders = R"(
