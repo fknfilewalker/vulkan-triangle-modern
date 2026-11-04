@@ -165,6 +165,7 @@ struct Swapchain : Resource
         const bool valid = sc.currentExtent.width != std::numeric_limits<uint32_t>::max();
         swapchainCreateInfo.imageExtent.width = valid ? sc.currentExtent.width : std::clamp(width, sc.minImageExtent.width, sc.maxImageExtent.width);
         swapchainCreateInfo.imageExtent.height = valid ? sc.currentExtent.height : std::clamp(height, sc.minImageExtent.height, sc.maxImageExtent.height);
+        for (const auto& frame : frames) auto _ = dev->waitForFences(*frame.presentFinishFence, true, UINT64_MAX); // old swapchain must be idle before it is destroyed
         swapchainCreateInfo.oldSwapchain = *swapchain;
         swapchain = vk::raii::SwapchainKHR{ *dev, swapchainCreateInfo };
         images = swapchain.getImages();
